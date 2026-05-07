@@ -24,6 +24,9 @@ export class MarcasAuditoriaService {
     const resultados = await this.marcasAuditoriaRepository.find({
       where: {
         id_marca: idMarca
+      },
+      order: {
+        fecha_actualizacion: 'DESC'
       }
     });
 

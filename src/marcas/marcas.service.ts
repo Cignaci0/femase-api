@@ -638,41 +638,45 @@ export class MarcasService {
       const direccion = empleadoInfo.empresa?.direccion_empresa || 'No especificada';
       const comuna = empleadoInfo.empresa?.comuna_empresa || 'No especificada';
 
-      await this.mailerService.sendMail({
-        to: correoEmpleado,
-        cc: empleadoInfo.email_noti,
-        subject: 'Eliminacion de Marca Registrada',
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333;">
-            <h2>Hola, ${nombreEmpleado}</h2>
-            <p>Se ha eliminado una marca en el sistema con los siguientes detalles:</p>
-            <ul>
-              <li><strong>Fecha:</strong> ${fechaFormatString}</li>
-              <li><strong>Hora:</strong> ${marca.hora_marca}</li>
-              <li><strong>Run:</strong> ${this.formatRUN(empleadoInfo.run)}</li>
-              <li><strong>Num ficha:</strong> ${empleadoInfo.num_ficha}</li>
-              <li><strong>Nombre:</strong> ${nombreEmpleado}</li>
-              <li><strong>Evento:</strong> ${eventoNombre}</li>
-              <li><strong>Hashcode:</strong> ${marca.hashcode}</li>
-              <li><strong>Dirección Marcación:</strong> ${empleadoInfo.cenco?.direccion || 'No especificada'}</li>
-              <li><strong>Comentario:</strong> ${marca.comentario}</li>
-            </ul>
-            <p>Sistema excepcional de jordana: No Aplica</p>
-            <p>Resolución Exenta: No Aplica</p>
-            <p>Geolocalización: No Aplica</p>
-            <p>Empleador:</p>
-            <ul>
-              <li><strong>Nombre Empresa:</strong> ${nombre_empresa}</li>
-              <li><strong>Rut Empresa:</strong> ${this.formatRUN(rut_empresa)}</li>
-              <li><strong>Dirección Empresa:</strong> ${direccion}</li>
-              <li><strong>Comuna Empresa:</strong> ${comuna}</li>
-            </ul>
-            <p>Empresa Transitoria o Subcontratado: NO APLICA</p>
-            <p>Nombre: NO APLICA</p>
-            <p>Rut: NO APLICA</p>
-            <p>Si no reconoces esta marca o tienes dudas, puedes contactar al administrador.</p>
-          </div>`,
-      });
+      try {
+        await this.mailerService.sendMail({
+          to: correoEmpleado,
+          cc: empleadoInfo.email_noti,
+          subject: 'Eliminacion de Marca Registrada',
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2>Hola, ${nombreEmpleado}</h2>
+              <p>Se ha eliminado una marca en el sistema con los siguientes detalles:</p>
+              <ul>
+                <li><strong>Fecha:</strong> ${fechaFormatString}</li>
+                <li><strong>Hora:</strong> ${marca.hora_marca}</li>
+                <li><strong>Run:</strong> ${this.formatRUN(empleadoInfo.run)}</li>
+                <li><strong>Num ficha:</strong> ${empleadoInfo.num_ficha}</li>
+                <li><strong>Nombre:</strong> ${nombreEmpleado}</li>
+                <li><strong>Evento:</strong> ${eventoNombre}</li>
+                <li><strong>Hashcode:</strong> ${marca.hashcode}</li>
+                <li><strong>Dirección Marcación:</strong> ${empleadoInfo.cenco?.direccion || 'No especificada'}</li>
+                <li><strong>Comentario:</strong> ${marca.comentario}</li>
+              </ul>
+              <p>Sistema excepcional de jordana: No Aplica</p>
+              <p>Resolución Exenta: No Aplica</p>
+              <p>Geolocalización: No Aplica</p>
+              <p>Empleador:</p>
+              <ul>
+                <li><strong>Nombre Empresa:</strong> ${nombre_empresa}</li>
+                <li><strong>Rut Empresa:</strong> ${this.formatRUN(rut_empresa)}</li>
+                <li><strong>Dirección Empresa:</strong> ${direccion}</li>
+                <li><strong>Comuna Empresa:</strong> ${comuna}</li>
+              </ul>
+              <p>Empresa Transitoria o Subcontratado: NO APLICA</p>
+              <p>Nombre: NO APLICA</p>
+              <p>Rut: NO APLICA</p>
+              <p>Si no reconoces esta marca o tienes dudas, puedes contactar al administrador.</p>
+            </div>`,
+        });
+      } catch (error) {
+        console.error('Error al enviar correo de eliminación:', error.message);
+      }
     }
     await this.marcasAuditoriaRepository.delete({ id_marca: id });
     return this.marcaRepository.delete(id);

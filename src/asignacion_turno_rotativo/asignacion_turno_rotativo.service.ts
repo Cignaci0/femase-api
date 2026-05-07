@@ -110,7 +110,23 @@ export class AsignacionTurnoRotativoService {
     return actualizar;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} asignacionTurnoRotativo`;
+ async remove(id: number) {
+  const existe = await this.asignacionTurnoRotativoRepository.findOne({
+    where: { id: id }
+  });
+  if (!existe) {
+    throw new HttpException(
+      `No se encontro la asignacion de turno rotativo`,
+      HttpStatus.BAD_REQUEST
+    );
+  }
+  const eliminar = this.asignacionTurnoRotativoRepository.remove(existe);
+  if (!eliminar) {
+    throw new HttpException(
+      `No se pudo eliminar la asignacion de turno rotativo`,
+      HttpStatus.BAD_REQUEST
+    );
+  }
+  return eliminar;
   }
 }
