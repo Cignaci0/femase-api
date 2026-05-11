@@ -883,7 +883,7 @@ async procesarAprobacionesAutomaticas() {
         </div>`,
       });
     } catch (error) {
-      this.logger.error(`Error al enviar correo de alerta a ${correoEmpleado}:`, error);
+      this.logger.error(`Error al enviar correo de alerta tipo ${tipo} a ${correoEmpleado}:`, error);
     }
   }
 }
