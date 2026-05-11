@@ -163,12 +163,6 @@ export class Empleado {
   @ApiProperty({ description: 'pin firma', example: 1234 })
   pin_firma: number;
 
-  @OneToMany(() => Firma, (firma) => firma.empleado)
-  firmas: Firma[];
-
-  @OneToMany(() => Solicitude, (solicitude) => solicitude.empleado)
-  solicitudes: Solicitude[];
-
   @Column({default:true})
   noti_30_entrada:boolean
 

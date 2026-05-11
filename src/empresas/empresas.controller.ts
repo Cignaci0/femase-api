@@ -1,11 +1,13 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { EmpresasService } from './empresas.service';
 import { Empresa } from './empresas.entity';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
+
 
 
 @Controller('empresas')
@@ -25,7 +27,7 @@ export class EmpresasController {
   @Post('crear')
   create(@Body() crearEmpresa: Empresa) {
     return this.empresaService.create(crearEmpresa);
-  } c
+  }
 
   @Patch('actualizar/:id')
   actualizar(@Param('id') id: string, @Body() updateDto: UpdateEmpresaDto) {
@@ -41,7 +43,7 @@ export class EmpresasController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: 'C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas',
+        destination: './imgEmpresas',
         filename: (req, file, cb) => {
           const empresaId = req.params.id;
           const randomName = Date.now();
@@ -64,9 +66,9 @@ export class EmpresasController {
   }
 
   @Get(':id/logo')
-  obtenerLogoEmpresa(@Param('id') id: string) {
-    return this.empresaService.obtenerLogoEmpresa(+id);
+  async obtenerLogoEmpresa(@Param('id') id: string, @Res() res: Response) {
+    const filename = await this.empresaService.obtenerLogoEmpresa(+id);
+    const filePath = join(__dirname, '../../imgEmpresas', filename);
+    return res.sendFile(filePath);
   }
-
-
 }
