@@ -7,7 +7,7 @@ import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.use('/logos', express.static('C:\\Users\\Crign\\OneDrive\\Desktop\\api-femase-fmc\\imgEmpresas')); // CAMBIAR RUTA 
+  app.use('/logos', express.static('C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas')); // CAMBIAR RUTA 
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors();
 
@@ -18,7 +18,7 @@ async function bootstrap() {
     // Add security features like Bearer Auth if needed
     // .addBearerAuth() 
     .build();
-    
+
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document); // 'api' is the endpoint URL for the docs
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');

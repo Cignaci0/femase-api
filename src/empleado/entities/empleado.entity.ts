@@ -148,6 +148,13 @@ export class Empleado {
 
   @OneToMany(() => Teletrabajo, (teletrabajo) => teletrabajo.id_empleado)
   teletrabajo: Teletrabajo[];
+
+  @OneToMany(() => Firma, (firma) => firma.empleado)
+  firmas: Firma[];
+
+  @OneToMany(() => Solicitude, (solicitude) => solicitude.empleado)
+  solicitudes: Solicitude[];
+
   @Column({ nullable: true })
   @ApiProperty({ description: 'fecha asignacion turno', example: "2024-01-01" })
   fecha_asignacion_turno: Date;
@@ -168,4 +175,7 @@ export class Empleado {
   @Column({default:true})
   noti_30_salida:boolean
 
+  @Column({ nullable: true, default: false })
+  @ApiProperty({ description: 'Indica si el empleado tiene turno flexible', example: true })
+  tiene_turno_flexible: boolean;
 }

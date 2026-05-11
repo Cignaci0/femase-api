@@ -50,14 +50,18 @@ export class DetalleAsistenciaService {
     for (const m of marcasResult) {
       const f = String(m.fecha_marca);
       if (!registrosMap.has(f)) {
+        const horario = m.empleado?.turno?.detalle_turno?.horario;
+        console.log(`[DEBUG] Mapping day ${f}: horario:`, horario);
         registrosMap.set(f, {
           fecha: f,
           marcasDia: [],
           entrada: null,
           salida: null,
-          entradaTeorica: m.empleado?.turno?.detalle_turno?.horario?.hora_entrada || '-',
-          salidaTeorica: m.empleado?.turno?.detalle_turno?.horario?.hora_salida || '-',
-          colacionTeorica: m.empleado?.turno?.detalle_turno?.horario?.colacion || '-',
+          entradaTeorica: horario?.hora_entrada || '-',
+          salidaTeorica: horario?.hora_salida || '-',
+          colacionTeorica: horario?.colacion || '-',
+          inicioColacionTeorica: horario?.hora_inicio_colacion || '-',
+          finColacionTeorica: horario?.hora_fin_colacion || '-',
           horasTeoricas: '00:00',
           horasPresenciales: '-',
           atraso: '-',
@@ -88,11 +92,18 @@ export class DetalleAsistenciaService {
       return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
     };
 
-    const parseMs = (timeStr: string): number => {
+    const parseMs = (timeStr: any): number => {
       if (!timeStr || timeStr === '-' || timeStr === '00:00' || timeStr === '00:00:00') return 0;
+      if (typeof timeStr === 'number') return timeStr * 60000;
+      if (typeof timeStr !== 'string') {
+        if (timeStr instanceof Date) {
+          return (timeStr.getUTCHours() * 3600000) + (timeStr.getUTCMinutes() * 60000) + (timeStr.getUTCSeconds() * 1000);
+        }
+        return 0;
+      }
       const p = timeStr.split(':');
       if (p.length < 2) return 0;
-      return (parseInt(p[0]) * 3600000) + (parseInt(p[1]) * 60000);
+      return (parseInt(p[0]) * 3600000) + (parseInt(p[1]) * 60000) + (p.length >= 3 ? parseInt(p[2]) * 1000 : 0);
     };
 
     const diffMsStr = (t1: string, t2: string): number => {

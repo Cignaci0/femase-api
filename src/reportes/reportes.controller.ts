@@ -147,4 +147,26 @@ export class ReportesController {
       throw new HttpException('Error generando reporte: ' + error.message, 500);
     }
   }
+
+  @Get('marcaciones-diarias/pdf')
+  async generateDailyMarkingsReport(
+    @Query('fecha') fecha: string,
+    @Res() res: Response
+  ) {
+    if (!fecha) {
+      throw new HttpException('Falta el parámetro requerido: fecha', 400);
+    }
+
+    try {
+      const pdfBuffer = await this.reportesService.generateDailyMarkingsPdf(fecha);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="marcaciones_diarias_${fecha}.pdf"`,
+        'Content-Length': pdfBuffer.length,
+      });
+      res.end(pdfBuffer);
+    } catch (error) {
+      throw new HttpException('Error generando reporte: ' + error.message, 500);
+    }
+  }
 }

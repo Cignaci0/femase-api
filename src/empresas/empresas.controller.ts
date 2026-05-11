@@ -41,7 +41,7 @@ export class EmpresasController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: 'C:\\Users\\Crign\\OneDrive\\Desktop\\api-femase-fmc\\imgEmpresas',
+        destination: 'C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas',
         filename: (req, file, cb) => {
           const empresaId = req.params.id;
           const randomName = Date.now();
@@ -68,5 +68,5 @@ export class EmpresasController {
     return this.empresaService.obtenerLogoEmpresa(+id);
   }
 
-  
+
 }

@@ -28,180 +28,238 @@ export class ReportesService {
     private readonly detalleAsistenciaService: DetalleAsistenciaService,
   ) { }
 
-  async generateAttendancePdf(numFicha: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
-    const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
-    const empleado = dataAsistencia.empleado;
-
-    let totalDiasTrabajados = 0;
-    let totalDiasAusente = 0;
-    let totalDiasDescanso = 0;
-    let totalDiasFeriado = 0;
-
-    const registros = dataAsistencia.registros.map((reg: any) => {
-      let isFeriadoLibre = false;
-      if (reg.observacion === 'Feriado' && reg.entrada === '-' && reg.salida === '-') {
-        isFeriadoLibre = true;
-      }
-
-      if (reg.entrada !== '-' || reg.salida !== '-') {
-        totalDiasTrabajados++;
-      } else if (isFeriadoLibre) {
-        totalDiasFeriado++;
-      } else if (reg.horasTeoricas === '-' || reg.horasTeoricas === '00:00') {
-        totalDiasDescanso++;
-      } else {
-        totalDiasAusente++;
-      }
-
-      return reg;
-    });
-
-    const data: UserReportDto = {
-      nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
-      cargo: empleado.cargo?.nombre || 'Sin cargo',
-      rut: empleado.run,
-      centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
-      fechaIngreso: empleado.fecha_ini_contrato ? new Date(empleado.fecha_ini_contrato).toLocaleDateString('es-CL') : 'N/A',
-      periodo: { desde: fechaInicio, hasta: fechaFin }, registros
-    };
+  async generateAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+    const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
+    const contentArr: any[] = [
+      { text: `REPORTE DE JORNADA DIARIA\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
+    ];
 
     const formatMs = (ms: number): string => {
-      if (ms <= 0) return '00:00';
+      if (ms <= 0) return '00:00:00';
       const hrs = Math.floor(ms / 3600000);
       const mins = Math.floor((ms % 3600000) / 60000);
-      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      const secs = Math.floor((ms % 60000) / 1000);
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     };
 
-    const parseMs = (timeStr: string): number => {
-      if (!timeStr || timeStr === '-' || timeStr === '00:00' || typeof timeStr !== 'string') return 0;
+    const parseMs = (timeStr: any): number => {
+      if (!timeStr || timeStr === '-' || timeStr === '00:00' || timeStr === '00:00:00') return 0;
+      if (typeof timeStr === 'number') return timeStr * 60000; // Si ya viene en minutos
+      if (typeof timeStr !== 'string') {
+        // Si es un objeto Date (a veces pasa con columnas time)
+        if (timeStr instanceof Date) {
+          return (timeStr.getHours() * 3600000) + (timeStr.getMinutes() * 60000) + (timeStr.getSeconds() * 1000);
+        }
+        return 0;
+      }
       const p = timeStr.split(':');
       if (p.length < 2) return 0;
       const hours = parseInt(p[0]);
       const minutes = parseInt(p[1]);
-      if (isNaN(hours) || isNaN(minutes)) return 0;
-      return (hours * 3600000) + (minutes * 60000);
+      const seconds = p.length >= 3 ? parseInt(p[2]) : 0;
+      if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return 0;
+      return (hours * 3600000) + (minutes * 60000) + (seconds * 1000);
     };
 
-    const tableBody: any[] = [
-      [
-        { text: 'Fecha', style: 'tableHeader' },
-        { text: 'Jornada ordinaria pactada', style: 'tableHeader' },
-        { text: 'Marcaciones jornada', style: 'tableHeader' },
-        { text: 'Colación', style: 'tableHeader' },
-        { text: 'Marcaciones colación', style: 'tableHeader' },
-        { text: 'Tiempo faltante', style: 'tableHeader' },
-        { text: 'Tiempo extra', style: 'tableHeader' },
-        { text: 'Otras marcaciones', style: 'tableHeader' },
-        { text: 'Observaciones', style: 'tableHeader' }
-      ]
-    ];
+    const formatTimeStr = (t: string): string => {
+      if (!t || t === '-') return '-';
+      const p = t.split(':');
+      if (p.length === 2) return `${p[0].padStart(2, '0')}:${p[1].padStart(2, '0')}:00`;
+      if (p.length === 3) return `${p[0].padStart(2, '0')}:${p[1].padStart(2, '0')}:${p[2].padStart(2, '0')}`;
+      return String(t).substring(0, 8);
+    };
 
-    let semTeoricasMs = 0;
-    let semPresencialesMs = 0;
-    let semAtrasoMs = 0;
-    let semJustificadasMs = 0;
-    let semExtraMs = 0;
-    let semNoTrabajadasMs = 0;
-    let semColacionMs = 0;
-    let semDiaMs = 0;
+    for (let fIndex = 0; fIndex < numFichas.length; fIndex++) {
+      const numFicha = numFichas[fIndex];
+      const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
+      const empleado = dataAsistencia.empleado;
 
-    let totalGralAtrasoMs = 0;
-    let totalGralJustificadasMs = 0;
-    let totalGralExtraMs = 0;
-    let totalGralNoTrabajadasMs = 0;
-    let totalGralDiaMs = 0;
-    let totalGralTeoricaMs = 0;
-    let totalGralPresencialMs = 0;
-    let totalGralColacionMs = 0;
+      let totalDiasTrabajados = 0;
+      let totalDiasAusente = 0;
+      let totalDiasDescanso = 0;
+      let totalDiasFeriado = 0;
 
-    for (let i = 0; i < data.registros.length; i++) {
-      const reg: any = data.registros[i];
+      const registros = dataAsistencia.registros.map((reg: any) => {
+        let isFeriadoLibre = false;
+        if (reg.observacion === 'Feriado' && reg.entrada === '-' && reg.salida === '-') {
+          isFeriadoLibre = true;
+        }
 
-      semTeoricasMs += parseMs(reg.horasTeoricas);
-      semPresencialesMs += parseMs(reg.horasPresenciales);
-      semAtrasoMs += parseMs(reg.atraso);
-      semJustificadasMs += parseMs(reg.horasJustificadas);
-      semExtraMs += parseMs(reg.horasExtra);
-      semNoTrabajadasMs += parseMs(reg.horasNoTrabajadas);
-      semColacionMs += parseMs(reg.colacionTeorica);
-      semDiaMs += parseMs(reg.totalDia);
+        if (reg.entrada !== '-' || reg.salida !== '-') {
+          totalDiasTrabajados++;
+        } else if (isFeriadoLibre) {
+          totalDiasFeriado++;
+        } else if (reg.horasTeoricas === '-' || reg.horasTeoricas === '00:00') {
+          totalDiasDescanso++;
+        } else {
+          totalDiasAusente++;
+        }
 
-      totalGralTeoricaMs += parseMs(reg.horasTeoricas);
-      totalGralPresencialMs += parseMs(reg.horasPresenciales);
-      totalGralAtrasoMs += parseMs(reg.atraso);
-      totalGralJustificadasMs += parseMs(reg.horasJustificadas);
-      totalGralExtraMs += parseMs(reg.horasExtra);
-      totalGralNoTrabajadasMs += parseMs(reg.horasNoTrabajadas);
-      totalGralColacionMs += parseMs(reg.colacionTeorica);
-      totalGralDiaMs += parseMs(reg.totalDia);
+        return reg;
+      });
 
-      let jornadaPactada = '-';
-      let colacionLimpia = reg.colacionTeorica && reg.colacionTeorica !== '-' ? String(reg.colacionTeorica).substring(0, 5) : '00:00';
-      if (reg.entradaTeorica && reg.entradaTeorica !== '-' && reg.salidaTeorica && reg.salidaTeorica !== '-') {
-        jornadaPactada = `${reg.entradaTeorica} - ${reg.salidaTeorica} (C: ${colacionLimpia})`;
-      }
+      const data: UserReportDto = {
+        nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
+        cargo: empleado.cargo?.nombre || 'Sin cargo',
+        rut: empleado.run,
+        centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
+        fechaIngreso: empleado.fecha_ini_contrato ? new Date(empleado.fecha_ini_contrato).toLocaleDateString('es-CL') : 'N/A',
+        periodo: { desde: fechaInicio, hasta: fechaFin }, registros
+      };
 
-      let marcacionesJornada = '-';
-      if (reg.entrada && reg.entrada !== '-') {
-        marcacionesJornada = `${reg.entrada} - ${reg.salida && reg.salida !== '-' ? reg.salida : ''}`;
-      }
+      const tableBody: any[] = [
+        [
+          { text: 'Fecha', style: 'tableHeader' },
+          { text: 'Jornada ordinaria pactada', style: 'tableHeader' },
+          { text: 'Marcaciones jornada', style: 'tableHeader' },
+          { text: 'Colación', style: 'tableHeader' },
+          { text: 'Marcaciones colación', style: 'tableHeader' },
+          { text: 'Tiempo faltante', style: 'tableHeader' },
+          { text: 'Tiempo extra', style: 'tableHeader' },
+          { text: 'Otras marcaciones', style: 'tableHeader' },
+          { text: 'Observaciones', style: 'tableHeader' },
+          { text: 'Distribución excep. de jornada', style: 'tableHeader' }
+        ]
+      ];
 
-      let marcacionesColacion = 'NO APLICA';
-      let otrasMarcaciones = '-';
-      if (reg.marcasDia && reg.marcasDia.length > 2) {
-        otrasMarcaciones = reg.marcasDia.slice(2).map((m: any) => String(m.hora_marca).substring(0, 5)).join(', ');
-      }
+      let semTeoricasMs = 0;
+      let semPresencialesMs = 0;
+      let semAtrasoMs = 0;
+      let semJustificadasMs = 0;
+      let semExtraMs = 0;
+      let semNoTrabajadasMs = 0;
+      let semColacionMs = 0;
+      let semDiaMs = 0;
 
-      const fechaParts = reg.fecha.split(' ');
-      let fechaFormateada = reg.fecha;
-      if (fechaParts.length === 2) {
-        const dParts = fechaParts[1].split('-');
-        if (dParts.length === 3) {
-          fechaFormateada = `${dParts[0]}/${dParts[1]}/${dParts[2]}`;
+      for (let i = 0; i < data.registros.length; i++) {
+        const reg: any = data.registros[i];
+
+        semTeoricasMs += parseMs(reg.horasTeoricas);
+        semPresencialesMs += parseMs(reg.totalDia);
+        
+        let rowColMs = parseMs(reg.colacionTeorica);
+        const sCMs = parseMs(reg.inicioColacionTeorica);
+        const eCMs = parseMs(reg.finColacionTeorica);
+        if (sCMs > 0 && eCMs > 0) {
+          let d = eCMs - sCMs;
+          if (d < 0) d += 24 * 3600000;
+          rowColMs = d;
+        }
+        semColacionMs += rowColMs;
+        
+        semNoTrabajadasMs += parseMs(reg.horasNoTrabajadas);
+        semExtraMs += parseMs(reg.horasExtra);
+        semDiaMs += parseMs(reg.totalDia);
+
+        let jornadaPactada = '-';
+        if (reg.entradaTeorica && reg.entradaTeorica !== '-' && reg.salidaTeorica && reg.salidaTeorica !== '-') {
+          jornadaPactada = `${formatTimeStr(reg.entradaTeorica)} - ${formatTimeStr(reg.salidaTeorica)}`;
+        }
+
+        let colacionLimpia = '-';
+        const colacionMins = Math.floor(rowColMs / 60000);
+
+        if (reg.inicioColacionTeorica && reg.inicioColacionTeorica !== '-' && reg.finColacionTeorica && reg.finColacionTeorica !== '-') {
+          colacionLimpia = `${formatTimeStr(reg.inicioColacionTeorica)} - ${formatTimeStr(reg.finColacionTeorica)} (C: ${colacionMins})`;
+        } else if (colacionMins > 0) {
+          colacionLimpia = `${formatTimeStr(reg.colacionTeorica)} (C: ${colacionMins})`;
+        }
+
+        let marcacionesJornada = '-';
+        let marcacionesColacion = 'No aplica';
+        let otrasMarcaciones = '-';
+
+        if (reg.marcasDia && reg.marcasDia.length > 0) {
+          const mSorted = [...reg.marcasDia].sort((a: any, b: any) => String(a.hora_marca).localeCompare(String(b.hora_marca)));
+          if (mSorted.length === 1) {
+            marcacionesJornada = `${formatTimeStr(String(mSorted[0].hora_marca))} -`;
+          } else if (mSorted.length === 2) {
+            marcacionesJornada = `${formatTimeStr(String(mSorted[0].hora_marca))} - ${formatTimeStr(String(mSorted[mSorted.length - 1].hora_marca))}`;
+          } else if (mSorted.length === 3) {
+            marcacionesJornada = `${formatTimeStr(String(mSorted[0].hora_marca))} - ${formatTimeStr(String(mSorted[mSorted.length - 1].hora_marca))}`;
+            otrasMarcaciones = formatTimeStr(String(mSorted[1].hora_marca));
+          } else if (mSorted.length >= 4) {
+            marcacionesJornada = `${formatTimeStr(String(mSorted[0].hora_marca))} - ${formatTimeStr(String(mSorted[mSorted.length - 1].hora_marca))}`;
+            marcacionesColacion = `${formatTimeStr(String(mSorted[1].hora_marca))} - ${formatTimeStr(String(mSorted[2].hora_marca))}`;
+            if (mSorted.length > 4) {
+              otrasMarcaciones = mSorted.slice(3, -1).map((m: any) => formatTimeStr(String(m.hora_marca))).join(', ');
+            }
+          }
+        }
+
+        const fechaParts = reg.fecha.split(' ');
+        let fechaFormateada = reg.fecha;
+        if (fechaParts.length === 2) {
+          const dParts = fechaParts[1].split('-');
+          if (dParts.length === 3) {
+            fechaFormateada = `${dParts[0]}/${dParts[1]}/${dParts[2].substring(2)}`;
+          }
+        }
+
+        tableBody.push([
+          fechaFormateada,
+          jornadaPactada,
+          marcacionesJornada,
+          colacionLimpia,
+          marcacionesColacion,
+          reg.horasNoTrabajadas && reg.horasNoTrabajadas !== '-' && reg.horasNoTrabajadas !== '00:00' ? '- ' + formatTimeStr(reg.horasNoTrabajadas) : '- 00:00:00',
+          reg.horasExtra && reg.horasExtra !== '-' && reg.horasExtra !== '00:00' ? '+ ' + formatTimeStr(reg.horasExtra) : '+ 00:00:00',
+          otrasMarcaciones,
+          reg.observacion,
+          'No Aplica'
+        ]);
+
+        const isSunday = reg.fecha.startsWith('Do.');
+        const isLastRecord = i === data.registros.length - 1;
+
+        if (isSunday || isLastRecord) {
+          const balanceFinalMs = semExtraMs - semNoTrabajadasMs;
+          const balanceFinalStr = balanceFinalMs >= 0 ? '+ ' + formatMs(balanceFinalMs) : '- ' + formatMs(Math.abs(balanceFinalMs));
+
+          tableBody.push([
+            { text: 'Total Semana', style: 'tableHeader', alignment: 'right' },
+            { text: formatMs(semTeoricasMs), style: 'tableHeader' },
+            { text: formatMs(semPresencialesMs), style: 'tableHeader' },
+            { text: formatMs(semColacionMs), style: 'tableHeader' },
+            { text: '', style: 'tableHeader' },
+            { text: '- ' + formatMs(semNoTrabajadasMs), style: 'tableHeader' },
+            { text: '+ ' + formatMs(semExtraMs), style: 'tableHeader' },
+            { text: '', style: 'tableHeader' },
+            { text: '', style: 'tableHeader' },
+            { text: balanceFinalStr, style: 'tableHeader', alignment: 'right' }
+          ]);
+
+          semTeoricasMs = 0;
+          semPresencialesMs = 0;
+          semColacionMs = 0;
+          semAtrasoMs = 0;
+          semJustificadasMs = 0;
+          semExtraMs = 0;
+          semNoTrabajadasMs = 0;
+          semDiaMs = 0;
         }
       }
 
-      tableBody.push([
-        fechaFormateada,
-        jornadaPactada,
-        marcacionesJornada,
-        colacionLimpia !== '00:00' ? colacionLimpia : '-',
-        marcacionesColacion,
-        '- ' + reg.horasNoTrabajadas,
-        '+ ' + reg.horasExtra,
-        otrasMarcaciones,
-        reg.observacion
-      ]);
-
-      const isSunday = reg.fecha.startsWith('Do.');
-      const isLastRecord = i === data.registros.length - 1;
-
-      if (isSunday || isLastRecord) {
-        tableBody.push([
-          { text: 'Total Semana', style: 'tableHeader', alignment: 'right' },
-          { text: formatMs(semTeoricasMs), style: 'tableHeader' },
-          { text: formatMs(semPresencialesMs), style: 'tableHeader' },
-          { text: formatMs(semColacionMs), style: 'tableHeader' },
-          { text: '', style: 'tableHeader' },
-          { text: '- ' + formatMs(semNoTrabajadasMs), style: 'tableHeader' },
-          { text: '+ ' + formatMs(semExtraMs), style: 'tableHeader' },
-          { text: '', style: 'tableHeader' },
-          { text: '', style: 'tableHeader' }
-        ]);
-
-        semTeoricasMs = 0;
-        semPresencialesMs = 0;
-        semColacionMs = 0;
-        semAtrasoMs = 0;
-        semJustificadasMs = 0;
-        semExtraMs = 0;
-        semNoTrabajadasMs = 0;
-        semDiaMs = 0;
-      }
+      contentArr.push(
+        {
+          columns: [
+            { text: `Razón Social: ${dataAsistencia.empleado.empresa?.nombre_empresa.toUpperCase() || 'FEMASE'}\nRUT Empresa: ${dataAsistencia.empleado.empresa?.rut_empresa || 'Sin rut'}\nDependiente sujeto a banda horaria: NO`, width: '*', fontSize: 8 },
+            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 8 }
+          ],
+          margin: [0, 20, 0, 10]
+        },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'],
+            body: tableBody
+          }
+        }
+      );
     }
 
     const fonts = {
-      Helvetica: {
+      Arial: {
         normal: 'Helvetica',
         bold: 'Helvetica-Bold',
         italics: 'Helvetica-Oblique',
@@ -211,29 +269,13 @@ export class ReportesService {
 
     const docDefinition = {
       pageOrientation: 'landscape',
-      content: [
-        { text: `REPORTE DE JORNADA DIARIA\n\nPeriodo: ${data.periodo.desde} hasta ${data.periodo.hasta}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
-        {
-          columns: [
-            { text: `Razón Social: ${dataAsistencia.empleado.empresa.nombre_empresa.toUpperCase()}\nRUT Empresa: ${dataAsistencia.empleado.empresa.rut_empresa}\n`, width: '*', fontSize: 11 },
-            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 11 }
-          ],
-          margin: [0, 10, 0, 10]
-        },
-        {
-          table: {
-            headerRows: 1,
-            widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*'],
-            body: tableBody
-          }
-        },
-      ],
+      content: contentArr,
       styles: {
-        header: { fontSize: 13, bold: true },
-        subheader: { fontSize: 12, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
         tableHeader: { bold: true, fontSize: 8 }
       },
-      defaultStyle: { font: 'Helvetica', fontSize: 8 }
+      defaultStyle: { font: 'Arial', fontSize: 8 }
     };
 
     pdfmake.setFonts(fonts);
@@ -241,94 +283,86 @@ export class ReportesService {
     return await pdfDoc.getBuffer();
   }
 
-  async generateSimpleAttendancePdf(numFicha: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
-    const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
-    const empleado = dataAsistencia.empleado;
-
-    const data = {
-      nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
-      cargo: empleado.cargo?.nombre || 'Sin cargo',
-      rut: empleado.run,
-      centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
-      periodo: { desde: fechaInicio, hasta: fechaFin },
-      empresa: empleado.empresa?.nombre_empresa || 'FEMASE',
-      rutEmpresa: empleado.empresa?.rut_empresa || 'Sin rut'
-    };
-
-    const tableBody: any[] = [
-      [
-        { text: 'Fecha', style: 'tableHeader' },
-        { text: 'Asistencia', style: 'tableHeader' },
-        { text: 'Ausencia', style: 'tableHeader' },
-        { text: 'Observaciones', style: 'tableHeader' }
-      ]
+  async generateSimpleAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+    const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
+    const contentArr: any[] = [
+      { text: `REPORTE DE ASISTENCIA\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
     ];
 
-    for (let i = 0; i < dataAsistencia.registros.length; i++) {
-      const reg = dataAsistencia.registros[i];
+    for (let fIndex = 0; fIndex < numFichas.length; fIndex++) {
+      const numFicha = numFichas[fIndex];
+      const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
+      const empleado = dataAsistencia.empleado;
 
-      const fechaParts = reg.fecha.split(' ');
-      let fechaFormateada = reg.fecha;
-      if (fechaParts.length === 2) {
-        const dParts = fechaParts[1].split('-');
-        if (dParts.length === 3) {
-          fechaFormateada = `${dParts[0]}/${dParts[1]}/${dParts[2]}`;
+      const data = {
+        nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
+        cargo: empleado.cargo?.nombre || 'Sin cargo',
+        rut: empleado.run,
+        centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
+        periodo: { desde: fechaInicio, hasta: fechaFin },
+        empresa: empleado.empresa?.nombre_empresa || 'FEMASE',
+        rutEmpresa: empleado.empresa?.rut_empresa || 'Sin rut'
+      };
+
+      const tableBody: any[] = [
+        [
+          { text: 'Fecha', style: 'tableHeader' },
+          { text: 'Asistencia', style: 'tableHeader' },
+          { text: 'Ausencia', style: 'tableHeader' },
+          { text: 'Observaciones', style: 'tableHeader' }
+        ]
+      ];
+
+      for (let i = 0; i < dataAsistencia.registros.length; i++) {
+        const reg = dataAsistencia.registros[i];
+
+        const fechaParts = reg.fecha.split(' ');
+        let fechaFormateada = reg.fecha;
+        if (fechaParts.length === 2) {
+          const dParts = fechaParts[1].split('-');
+          if (dParts.length === 3) {
+            fechaFormateada = `${dParts[0]}/${dParts[1]}/${dParts[2]}`;
+          }
         }
-      }
 
-      const esLibreOFeriado = reg.observacion === 'FERIADO' || reg.observacion === 'DIA LIBRE' || reg.horasTeoricas === '-' || reg.horasTeoricas === '00:00';
-      const tieneEntradaYSalida = reg.entrada !== '-' && reg.salida !== '-';
+        const esLibreOFeriado = reg.observacion === 'FERIADO' || reg.observacion === 'DIA LIBRE' || reg.horasTeoricas === '-' || reg.horasTeoricas === '00:00';
+        const tieneMarca = reg.entrada !== '-' || reg.salida !== '-';
 
-      let asistenciaTxt = '';
-      if (tieneEntradaYSalida) {
-        asistenciaTxt = 'SI';
-      } else if (esLibreOFeriado) {
-        asistenciaTxt = '-';
-      } else {
-        asistenciaTxt = 'NO';
-      }
+        let asistenciaTxt = tieneMarca ? 'SI' : 'NO';
+        let ausenciaTxt = '-';
+        let observacionEfectiva = reg.observacion;
 
-      let ausenciaTxt = '';
-      if (asistenciaTxt === 'NO') {
-        if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA')) {
-          ausenciaTxt = 'JUSTIFICADA';
+        if (tieneMarca) {
+          observacionEfectiva = 'PRESENTE CON MARCA';
         } else {
-          ausenciaTxt = 'NO JUSTIFICADA';
+          if (esLibreOFeriado) {
+            ausenciaTxt = '-';
+            observacionEfectiva = reg.observacion === 'FERIADO' ? 'FERIADO' : 'DIA LIBRE';
+          } else {
+            if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA') || reg.observacion.includes('LICENCIA') || reg.observacion.includes('VACACIONES')) {
+              ausenciaTxt = 'JUSTIFICADA';
+            } else {
+              ausenciaTxt = 'INJUSTIFICADA';
+              observacionEfectiva = 'IN. NO JUSTIFICADA';
+            }
+          }
         }
+
+        tableBody.push([
+          fechaFormateada,
+          asistenciaTxt,
+          ausenciaTxt,
+          observacionEfectiva.toUpperCase()
+        ]);
       }
 
-      let observacionEfectiva = reg.observacion;
-      if (asistenciaTxt === 'SI') {
-        observacionEfectiva = 'PRESENTE CON MARCA';
-      }
-
-      tableBody.push([
-        fechaFormateada,
-        asistenciaTxt,
-        ausenciaTxt,
-        observacionEfectiva.toUpperCase()
-      ]);
-    }
-
-    const fonts = {
-      Helvetica: {
-        normal: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italics: 'Helvetica-Oblique',
-        bolditalics: 'Helvetica-BoldOblique'
-      }
-    };
-
-    const docDefinition = {
-      pageOrientation: 'landscape',
-      content: [
-        { text: `REPORTE DE ASISTENCIA\n\nPeriodo: ${data.periodo.desde} hasta ${data.periodo.hasta}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
+      contentArr.push(
         {
           columns: [
-            { text: `Razón Social: ${data.empresa.toUpperCase()}\nRUT Empresa: ${data.rutEmpresa}\n`, width: '*', fontSize: 11 },
-            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 11 }
+            { text: `Razón Social: ${data.empresa.toUpperCase()}\nRUT Empresa: ${data.rutEmpresa}\n`, width: '*', fontSize: 8 },
+            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 8 }
           ],
-          margin: [0, 10, 0, 10]
+          margin: [0, 20, 0, 10]
         },
         {
           table: {
@@ -337,13 +371,27 @@ export class ReportesService {
             body: tableBody
           }
         }
-      ],
+      );
+    }
+
+    const fonts = {
+      Arial: {
+        normal: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italics: 'Helvetica-Oblique',
+        bolditalics: 'Helvetica-BoldOblique'
+      }
+    };
+
+    const docDefinition = {
+      pageOrientation: 'landscape',
+      content: contentArr,
       styles: {
-        header: { fontSize: 13, bold: true },
-        subheader: { fontSize: 12, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        tableHeader: { bold: true, fontSize: 10 }
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        tableHeader: { bold: true, fontSize: 8 }
       },
-      defaultStyle: { font: 'Helvetica', fontSize: 10 }
+      defaultStyle: { font: 'Arial', fontSize: 8 }
     };
 
     pdfmake.setFonts(fonts);
@@ -480,7 +528,7 @@ export class ReportesService {
       `Total de días disponibles: ${diasDisponibles.toFixed(2)}`;
 
     const fonts = {
-      Helvetica: {
+      Arial: {
         normal: 'Helvetica',
         bold: 'Helvetica-Bold',
         italics: 'Helvetica-Oblique',
@@ -494,14 +542,14 @@ export class ReportesService {
         {
           columns: [
             { text: busquedaEmpleado.empresa?.nombre_empresa || 'Fundación Mi Casa', style: 'header', alignment: 'left', width: '*' },
-            { text: 'Fecha generación documento: ' + new Date().toLocaleString('es-CL'), alignment: 'right', fontSize: 10, margin: [0, 2, 0, 0], width: 'auto' }
+            { text: 'Fecha generación documento: ' + new Date().toLocaleString('es-CL'), alignment: 'right', fontSize: 8, margin: [0, 2, 0, 0], width: 'auto' }
           ]
         },
         { text: 'Historial de Vacaciones por Persona', style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
         {
           columns: [
-            { text: `Nombre: ${busquedaEmpleado.nombres} ${busquedaEmpleado.apellido_paterno} ${busquedaEmpleado.apellido_materno}\nCargo: ${busquedaEmpleado.cargo?.nombre || 'Sin cargo'}`, width: '*', fontSize: 11 },
-            { text: `RUT: ${busquedaEmpleado.run}\nFecha Ingreso: ${formatDate(busquedaEmpleado.fecha_ini_contrato)}\nCenco: ${busquedaEmpleado.cenco?.nombre_cenco || 'Sin cenco'}`, width: '*', fontSize: 11 }
+            { text: `Nombre: ${busquedaEmpleado.nombres} ${busquedaEmpleado.apellido_paterno} ${busquedaEmpleado.apellido_materno}\nCargo: ${busquedaEmpleado.cargo?.nombre || 'Sin cargo'}`, width: '*', fontSize: 8 },
+            { text: `RUT: ${busquedaEmpleado.run}\nFecha Ingreso: ${formatDate(busquedaEmpleado.fecha_ini_contrato)}\nCenco: ${busquedaEmpleado.cenco?.nombre_cenco || 'Sin cenco'}`, width: '*', fontSize: 8 }
           ],
           margin: [0, 10, 0, 10]
         },
@@ -524,20 +572,20 @@ export class ReportesService {
             {
               width: '40%',
               columns: [
-                { text: '__________________\nV° B° Recursos Humanos', alignment: 'center', fontSize: 11 },
-                { text: '__________________\nV° B° Trabajador', alignment: 'center', fontSize: 11 }
+                { text: '__________________\nV° B° Recursos Humanos', alignment: 'center', fontSize: 8 },
+                { text: '__________________\nV° B° Trabajador', alignment: 'center', fontSize: 8 }
               ]
             }
           ]
         }
       ],
       styles: {
-        header: { fontSize: 14, bold: true },
-        subheader: { fontSize: 13, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        resumenTexto: { fontSize: 11, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        tableHeader: { bold: true, fontSize: 10, alignment: 'center' }
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        resumenTexto: { fontSize: 8, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        tableHeader: { bold: true, fontSize: 8, alignment: 'center' }
       },
-      defaultStyle: { font: 'Helvetica', fontSize: 10, alignment: 'center' }
+      defaultStyle: { font: 'Arial', fontSize: 8, alignment: 'center' }
     };
 
     pdfmake.setFonts(fonts);
@@ -615,7 +663,7 @@ export class ReportesService {
     }
 
     const fonts = {
-      Helvetica: {
+      Arial: {
         normal: 'Helvetica',
         bold: 'Helvetica-Bold',
         italics: 'Helvetica-Oblique',
@@ -629,14 +677,14 @@ export class ReportesService {
         {
           columns: [
             { text: busquedaEmpleado.empresa?.nombre_empresa || 'Fundación Mi Casa', style: 'header', alignment: 'left', width: '*' },
-            { text: 'Fecha generación documento: ' + new Date().toLocaleString('es-CL'), alignment: 'right', fontSize: 10, margin: [0, 2, 0, 0], width: 'auto' }
+            { text: 'Fecha generación documento: ' + new Date().toLocaleString('es-CL'), alignment: 'right', fontSize: 8, margin: [0, 2, 0, 0], width: 'auto' }
           ]
         },
         { text: 'Reporte de Ausencias por Persona', style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
         {
           columns: [
-            { text: `Nombre: ${busquedaEmpleado.nombres} ${busquedaEmpleado.apellido_paterno} ${busquedaEmpleado.apellido_materno}\nCargo: ${busquedaEmpleado.cargo?.nombre || 'Sin cargo'}`, width: '*', fontSize: 11 },
-            { text: `RUT: ${busquedaEmpleado.run}\nFecha Ingreso: ${formatDate(busquedaEmpleado.fecha_ini_contrato)}\nCenco: ${busquedaEmpleado.cenco?.nombre_cenco || 'Sin cenco'}`, width: '*', fontSize: 11 }
+            { text: `Nombre: ${busquedaEmpleado.nombres} ${busquedaEmpleado.apellido_paterno} ${busquedaEmpleado.apellido_materno}\nCargo: ${busquedaEmpleado.cargo?.nombre || 'Sin cargo'}`, width: '*', fontSize: 8 },
+            { text: `RUT: ${busquedaEmpleado.run}\nFecha Ingreso: ${formatDate(busquedaEmpleado.fecha_ini_contrato)}\nCenco: ${busquedaEmpleado.cenco?.nombre_cenco || 'Sin cenco'}`, width: '*', fontSize: 8 }
           ],
           margin: [0, 10, 0, 10]
         },
@@ -659,20 +707,20 @@ export class ReportesService {
             {
               width: '40%',
               columns: [
-                { text: '__________________\nV° B° Recursos Humanos', alignment: 'center', fontSize: 11 },
-                { text: '__________________\nV° B° Trabajador', alignment: 'center', fontSize: 11 }
+                { text: '__________________\nV° B° Recursos Humanos', alignment: 'center', fontSize: 8 },
+                { text: '__________________\nV° B° Trabajador', alignment: 'center', fontSize: 8 }
               ]
             }
           ]
         }
       ],
       styles: {
-        header: { fontSize: 14, bold: true },
-        subheader: { fontSize: 13, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        resumenTexto: { fontSize: 11, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        tableHeader: { bold: true, fontSize: 10, alignment: 'center' }
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        resumenTexto: { fontSize: 8, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        tableHeader: { bold: true, fontSize: 8, alignment: 'center' }
       },
-      defaultStyle: { font: 'Helvetica', fontSize: 10, alignment: 'center' }
+      defaultStyle: { font: 'Arial', fontSize: 8, alignment: 'center' }
     };
 
     pdfmake.setFonts(fonts);
@@ -680,116 +728,186 @@ export class ReportesService {
     return await pdfDoc.getBuffer();
   }
 
-  async generateDomFestPdf(numFicha: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
-    const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
-    const empleado = dataAsistencia.empleado;
+  async generateDomFestPdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+    const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
+    const contentArr: any[] = [
+      { text: `REPORTE DOMINGOS Y FESTIVOS\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
+    ];
     const feriados = await this.feriadosRepository.find();
 
-    const data = {
-      nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
-      rut: empleado.run,
-      centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
-      periodo: { desde: fechaInicio, hasta: fechaFin },
-      empresa: empleado.empresa?.nombre_empresa || 'FEMASE',
-      rutEmpresa: empleado.empresa?.rut_empresa || 'Sin rut'
-    };
+    for (let fIndex = 0; fIndex < numFichas.length; fIndex++) {
+      const numFicha = numFichas[fIndex];
+      const dataAsistencia = await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
+      const empleado = dataAsistencia.empleado;
 
-    const tableBody: any[] = [
-      [
-        { text: 'Beneficiario descanso adicionales', style: 'tableHeader' },
-        { text: 'Fecha', style: 'tableHeader' },
-        { text: 'Asistencia', style: 'tableHeader' },
-        { text: 'Ausencia', style: 'tableHeader' },
-        { text: 'Observaciones', style: 'tableHeader' }
-      ]
-    ];
+      const data = {
+        nombre: empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno,
+        rut: empleado.run,
+        centroCosto: empleado.cenco?.nombre_cenco || 'Sin cenco',
+        periodo: { desde: fechaInicio, hasta: fechaFin },
+        empresa: empleado.empresa?.nombre_empresa || 'FEMASE',
+        rutEmpresa: empleado.empresa?.rut_empresa || 'Sin rut',
+        cargo: empleado.cargo?.nombre || 'Sin cargo'
+      };
 
-    // Mapear registros por fecha pura para búsqueda rápida
-    const registrosMap = new Map<string, any>();
-    dataAsistencia.registros.forEach((reg: any) => {
-      // reg.fecha format is usually "Do. 05-04-2026" or similar. 
-      // We need to extract the date part "DD-MM-YYYY"
-      const parts = reg.fecha.split(' ');
-      if (parts.length === 2) {
-        registrosMap.set(parts[1], reg);
-      }
-    });
+      const tableBody: any[] = [
+        [
+          { text: 'Beneficiario descanso adicionales', style: 'tableHeader' },
+          { text: 'Fecha', style: 'tableHeader' },
+          { text: 'Asistencia', style: 'tableHeader' },
+          { text: 'Ausencia', style: 'tableHeader' },
+          { text: 'Observaciones', style: 'tableHeader' }
+        ]
+      ];
 
-    const start = new Date(fechaInicio + 'T12:00:00');
-    const end = new Date(fechaFin + 'T12:00:00');
-
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay(); // 0 is Sunday
-      const fStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
-      const fDisplay = fStr.split('-').reverse().join('-'); // DD-MM-YYYY
-
-      const isFeriado = feriados.some(fer => {
-        let ferStr = '';
-        if (fer.fecha instanceof Date) ferStr = fer.fecha.toISOString().split('T')[0];
-        else ferStr = String(fer.fecha).substring(0, 10);
-        return ferStr === fStr;
+      const registrosMap = new Map<string, any>();
+      dataAsistencia.registros.forEach((reg: any) => {
+        const parts = reg.fecha.split(' ');
+        if (parts.length === 2) {
+          registrosMap.set(parts[1], reg);
+        }
       });
 
-      if (dayOfWeek === 0 || isFeriado) {
-        const reg = registrosMap.get(fDisplay);
+      const start = new Date(fechaInicio + 'T12:00:00');
+      const end = new Date(fechaFin + 'T12:00:00');
 
-        let asistenciaTxt = 'NO';
-        let ausenciaTxt = '-';
+      const diasValidos: any[] = [];
+      let trabajaDomingosOFestivos = false;
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay(); // 0 is Sunday
+        const fStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+        const [y, mStr, dStr] = fStr.split('-');
+        const m = parseInt(mStr);
+        const year = parseInt(y);
+        const fDisplay = `${dStr}/${mStr}/${y.substring(2)}`; // DD/MM/YY
+        const fDisplayHyphen = `${dStr}-${mStr}-${y}`;
+
+        const isFeriado = feriados.some(fer => {
+          let ferStr = '';
+          if (fer.fecha instanceof Date) ferStr = fer.fecha.toISOString().split('T')[0];
+          else ferStr = String(fer.fecha).substring(0, 10);
+          return ferStr === fStr;
+        });
+
+        if (dayOfWeek === 0 || isFeriado) {
+          const reg = registrosMap.get(fDisplayHyphen);
+
+          let asistenciaTxt = 'NO';
+          let ausenciaTxt = '';
         let observacionTxt = isFeriado ? 'FERIADO' : 'DOMINGO';
+        let asistio = false;
+        let debioAsistir = false;
 
         if (reg) {
           const tieneEntrada = reg.entrada && reg.entrada !== '-';
           const tieneSalida = reg.salida && reg.salida !== '-';
+          const tieneHorasTeoricas = reg.horasTeoricas !== '-' && reg.horasTeoricas !== '00:00';
 
           if (tieneEntrada || tieneSalida) {
+            asistio = true;
+            debioAsistir = true;
             asistenciaTxt = 'SI';
             observacionTxt = 'PRESENTE CON MARCA';
           } else {
             asistenciaTxt = 'NO';
-            if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA')) {
-              ausenciaTxt = 'JUSTIFICADA';
-              observacionTxt = 'DIA LIBRE';
-            } else if (reg.horasNoTrabajadas !== '-' && reg.horasNoTrabajadas !== '00:00' && reg.horasTeoricas !== '-' && reg.horasTeoricas !== '00:00') {
-              ausenciaTxt = 'INJUSTIFICADA';
-              if (reg.observacion) observacionTxt = reg.observacion;
+            if (tieneHorasTeoricas) {
+              debioAsistir = true;
+              if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA') || reg.observacion.includes('VACACIONES') || reg.observacion.includes('LICENCIA')) {
+                ausenciaTxt = 'JUSTIFICADA';
+                observacionTxt = reg.observacion || 'AUSENCIA JUSTIFICADA';
+              } else {
+                ausenciaTxt = 'INJUSTIFICADA';
+                observacionTxt = reg.observacion && reg.observacion !== 'Feriado' ? reg.observacion : 'INASISTENCIA INJUSTIFICADA';
+              }
             } else {
-              observacionTxt = 'DIA LIBRE';
+              debioAsistir = false;
             }
           }
-        } else {
-          // No hay registro de marca ni de ausencia, por defecto es un día libre (Domingo o Feriado)
-          observacionTxt = 'DIA LIBRE';
         }
 
-        tableBody.push([
-          numFicha,
+        if (asistio || debioAsistir) {
+          trabajaDomingosOFestivos = true;
+        }
+
+        diasValidos.push({
+          month: m,
+          year: year,
           fDisplay,
           asistenciaTxt,
           ausenciaTxt,
-          observacionTxt.toUpperCase()
-        ]);
+          observacionTxt,
+          asistio
+        });
       }
     }
 
-    const fonts = {
-      Helvetica: {
-        normal: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italics: 'Helvetica-Oblique',
-        bolditalics: 'Helvetica-BoldOblique'
-      }
-    };
+    let sumatoriaTotal = 0;
 
-    const docDefinition = {
-      pageOrientation: 'landscape',
-      content: [
-        { text: `REPORTE DOMINGOS Y FESTIVOS\n\nPeriodo: ${data.periodo.desde} hasta ${data.periodo.hasta}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
+    if (!trabajaDomingosOFestivos) {
+      tableBody.push([
+        { text: 'La jornada de este trabajador no incluye domingos o festivos', colSpan: 5, alignment: 'center' },
+        {}, {}, {}, {}
+      ]);
+    } else {
+      let currentMonth = diasValidos[0].month;
+      let currentYear = diasValidos[0].year;
+      let sumatoriaMensual = 0;
+
+      for (let i = 0; i < diasValidos.length; i++) {
+        const dia = diasValidos[i];
+
+        if (dia.month !== currentMonth || dia.year !== currentYear) {
+          tableBody.push([
+            { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
+            {},
+            { text: String(sumatoriaMensual), bold: true },
+            {},
+            {}
+          ]);
+          currentMonth = dia.month;
+          currentYear = dia.year;
+          sumatoriaMensual = 0;
+        }
+
+        if (dia.asistio) {
+          sumatoriaMensual++;
+          sumatoriaTotal++;
+        }
+
+        tableBody.push([
+          'No',
+          dia.fDisplay,
+          dia.asistenciaTxt,
+          dia.ausenciaTxt,
+          dia.observacionTxt.toUpperCase()
+        ]);
+      }
+
+      tableBody.push([
+        { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
+        {},
+        { text: String(sumatoriaMensual), bold: true },
+        {},
+        {}
+      ]);
+
+      tableBody.push([
+        { text: `Sumatoria total periodo`, colSpan: 2, alignment: 'right', bold: true },
+        {},
+        { text: String(sumatoriaTotal), bold: true },
+        {},
+        {}
+      ]);
+    }
+
+      contentArr.push(
         {
           columns: [
-            { text: `Razón Social: ${data.empresa.toUpperCase()}\nRUT Empresa: ${data.rutEmpresa}\n`, width: '*', fontSize: 11 },
-            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 11 }
+            { text: `Razón Social: ${data.empresa.toUpperCase()}\nRUT Empresa: ${data.rutEmpresa}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 8 },
+            { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nCargo: ${data.cargo.toUpperCase()}`, width: '*', fontSize: 8 }
           ],
-          margin: [0, 10, 0, 10]
+          margin: [0, 20, 0, 10]
         },
         {
           table: {
@@ -798,84 +916,11 @@ export class ReportesService {
             body: tableBody
           }
         }
-      ],
-      styles: {
-        header: { fontSize: 13, bold: true },
-        subheader: { fontSize: 12, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
-        tableHeader: { bold: true, fontSize: 10 }
-      },
-      defaultStyle: { font: 'Helvetica', fontSize: 10 }
-    };
-
-    pdfmake.setFonts(fonts);
-    const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
-  }
-
-  async generateAuditTurnoPdf(fechaInicio: string, fechaFin: string, numFicha: string): Promise<Buffer> {
-    const empleado = await this.empleadoRepository.findOne({
-      where: { num_ficha: numFicha },
-      relations: ['empresa', 'cargo', 'cenco']
-    });
-
-    if (!empleado) {
-      throw new HttpException('Empleado no encontrado', 404);
-    }
-
-    const query = this.auditoriaTurnoRepository.createQueryBuilder('audit');
-
-    if (fechaInicio && fechaFin) {
-      query.andWhere('audit.fecha_asignacion_turno BETWEEN :inicio AND :fin', {
-        inicio: new Date(fechaInicio),
-        fin: new Date(fechaFin)
-      });
-    }
-
-    query.andWhere('audit.run_empleado = :numFicha', { numFicha });
-
-    const logs = await query.orderBy('audit.fecha_asignacion_turno', 'DESC').getMany();
-
-    const formatDate = (d: any) => {
-      if (!d) return 'N/A';
-      const date = d instanceof Date ? d : new Date(d);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = String(date.getFullYear()).substring(2);
-      return `${day}/${month}/${year}`;
-    };
-
-    const tableBody: any[] = [
-      [
-        { text: 'Fecha asignación turno', style: 'tableHeader' },
-        { text: 'Turno asignado', style: 'tableHeader' },
-        { text: 'Extensión de Turno', style: 'tableHeader' },
-        { text: 'Fecha asignación de turno nuevo', style: 'tableHeader' },
-        { text: 'Turno nuevo', style: 'tableHeader' },
-        { text: 'Extensión de Turno', style: 'tableHeader' },
-        { text: 'Quien asigna el turno', style: 'tableHeader' },
-        { text: 'Observaciones', style: 'tableHeader' }
-      ]
-    ];
-
-    logs.forEach(log => {
-      tableBody.push([
-        formatDate(log.fecha_asignacion_turno),
-        `${log.hora_entrada || '--'} a ${log.hora_salida || '--'}`,
-        log.extension_turno || 'Diario',
-        formatDate(log.inicio_turno),
-        `${log.nuevo_hora_entrada || '--'} a ${log.nuevo_hora_salida || '--'}`,
-        log.extension_nuevo_turno || 'Diario',
-        log.solicitador_cambio || 'Sistema',
-        log.observaciones || ''
-      ]);
-    });
-
-    if (logs.length === 0) {
-      tableBody.push([{ text: 'No hay registros de auditoría para este periodo', colSpan: 8, alignment: 'center' }, {}, {}, {}, {}, {}, {}, {}]);
+      );
     }
 
     const fonts = {
-      Helvetica: {
+      Arial: {
         normal: 'Helvetica',
         bold: 'Helvetica-Bold',
         italics: 'Helvetica-Oblique',
@@ -885,29 +930,229 @@ export class ReportesService {
 
     const docDefinition = {
       pageOrientation: 'landscape',
-      content: [
-        { text: `REPORTE AUDITORÍA DE TURNOS\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] },
-        {
-          columns: [
-            { text: `Razón Social: ${empleado.empresa?.nombre_empresa?.toUpperCase() || 'N/A'}\nRUT Empresa: ${empleado.empresa?.rut_empresa || 'N/A'}\n`, width: '*', fontSize: 11 },
-            { text: `Nombre: ${(empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno).toUpperCase()}\nFicha: ${empleado.num_ficha}\nLugar de prestación de servicios: ${empleado.cenco?.nombre_cenco?.toUpperCase() || 'N/A'}`, width: '*', fontSize: 11 }
-          ],
-          margin: [0, 10, 0, 10]
-        },
-        {
+      content: contentArr,
+      styles: {
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] as [number, number, number, number] },
+        tableHeader: { bold: true, fontSize: 8 }
+      },
+      defaultStyle: { font: 'Arial', fontSize: 8 }
+    };
+
+    pdfmake.setFonts(fonts);
+    const pdfDoc = pdfmake.createPdf(docDefinition);
+    return await pdfDoc.getBuffer();
+  }
+
+  async generateAuditTurnoPdf(fechaInicio: string, fechaFin: string, numFichaStr: string): Promise<Buffer> {
+    const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
+    const contentArr: any[] = [
+      { text: `REPORTE DE MODIFICACIONES Y/O ALTERACIONES DE TURNOS\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 10] }
+    ];
+
+    const formatDate = (d: any) => {
+      if (!d) return 'N/A';
+      const date = d instanceof Date ? d : new Date(d);
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const year = String(date.getUTCFullYear()).substring(2);
+      return `${day}/${month}/${year}`;
+    };
+
+    for (let fIndex = 0; fIndex < numFichas.length; fIndex++) {
+      const numFicha = numFichas[fIndex];
+      const empleado = await this.empleadoRepository.findOne({
+        where: { num_ficha: numFicha },
+        relations: ['empresa', 'cargo', 'cenco', 'turno']
+      });
+
+      if (!empleado) continue;
+
+      const dInicio = new Date(fechaInicio + 'T00:00:00');
+      const dFin = new Date(fechaFin + 'T23:59:59');
+      
+      console.log(`[DEBUG] Buscando para ficha: ${numFicha}, desde: ${dInicio.toISOString()}, hasta: ${dFin.toISOString()}`);
+
+      const query = this.auditoriaTurnoRepository.createQueryBuilder('audit');
+      query.andWhere('audit.fecha_asignacion_turno >= :inicio', { inicio: dInicio });
+      query.andWhere('audit.fecha_asignacion_turno <= :fin', { fin: dFin });
+      query.andWhere('audit.run_empleado = :numFicha', { numFicha });
+      
+      const logs = await query.orderBy('audit.fecha_asignacion_turno', 'DESC').getMany();
+      console.log(`[DEBUG] Auditoria logs encontrados:`, logs.length);
+      if (logs.length > 0) {
+          console.log(`[DEBUG] Primer log run_empleado: ${logs[0].run_empleado}, fecha: ${logs[0].fecha_asignacion_turno}`);
+      }
+
+      contentArr.push({
+        columns: [
+          { text: `Razón Social: ${empleado.empresa?.nombre_empresa?.toUpperCase() || 'N/A'}\nRUT Empresa: ${empleado.empresa?.rut_empresa || 'N/A'}\n`, width: '*', fontSize: 8 },
+          { text: `Nombre: ${(empleado.nombres + ' ' + empleado.apellido_paterno + ' ' + empleado.apellido_materno).toUpperCase()}\nRUT: ${empleado.run}\nLugar de prestación de servicios: ${empleado.cenco?.nombre_cenco?.toUpperCase() || 'N/A'}`, width: '*', fontSize: 8 }
+        ],
+        margin: [0, 10, 0, 10]
+      });
+
+      if (!empleado.turno) {
+        contentArr.push({ text: 'Este trabajador mantiene una jornada fija permanente (Sin sistema de turnos)', alignment: 'center', margin: [0, 20, 0, 20], bold: true });
+      } else if (logs.length === 0) {
+        contentArr.push({ text: 'Sin cambios o modificaciones en el periodo consultado', alignment: 'center', margin: [0, 20, 0, 20], bold: true });
+      } else {
+        const tableBody: any[] = [
+          [
+            { text: 'Fecha asignación turno', style: 'tableHeader' },
+            { text: 'Detalle turno asignado', style: 'tableHeader' },
+            { text: 'Extensión turno', style: 'tableHeader' },
+            { text: 'Fecha asignación nuevo turno', style: 'tableHeader' },
+            { text: 'Inicio de turno', style: 'tableHeader' },
+            { text: 'Detalle nuevo turno asignado', style: 'tableHeader' },
+            { text: 'Extensión nuevo turno', style: 'tableHeader' },
+            { text: 'Solicitado por', style: 'tableHeader' },
+            { text: 'Observaciones', style: 'tableHeader' }
+          ]
+        ];
+
+        logs.forEach(log => {
+          let solicitante = 'Empleador';
+          if (log.solicitador_cambio && (log.solicitador_cambio.toLowerCase() === 'trabajador' || log.solicitador_cambio === empleado.num_ficha)) {
+            solicitante = 'Trabajador';
+          }
+
+          tableBody.push([
+            formatDate(log.fecha_asignacion_turno),
+            `${log.hora_entrada || '--'} a ${log.hora_salida || '--'}`,
+            log.extension_turno || 'Diario',
+            formatDate(log.fecha_asignacion_turno),
+            formatDate(log.inicio_turno),
+            `${log.nuevo_hora_entrada || '--'} a ${log.nuevo_hora_salida || '--'}`,
+            log.extension_nuevo_turno || 'Diario',
+            solicitante,
+            log.observaciones || ''
+          ]);
+        });
+
+        contentArr.push({
           table: {
             headerRows: 1,
-            widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*'],
+            widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*'],
             body: tableBody
           }
-        }
-      ],
+        });
+      }
+
+      if (fIndex < numFichas.length - 1) {
+        contentArr.push({ 
+          canvas: [{ type: 'line', x1: 0, y1: 5, x2: 750, y2: 5, lineWidth: 0.5, lineColor: '#cccccc' }],
+          margin: [0, 15, 0, 15] 
+        });
+      }
+    }
+
+    const fonts = {
+      Arial: {
+        normal: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italics: 'Helvetica-Oblique',
+        bolditalics: 'Helvetica-BoldOblique'
+      }
+    };
+
+    const docDefinition = {
+      pageOrientation: 'landscape',
+      content: contentArr,
       styles: {
-        header: { fontSize: 11, bold: true },
-        subheader: { fontSize: 11, bold: true, margin: [0, 5, 0, 5] },
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 8, bold: true, margin: [0, 5, 0, 5] },
         tableHeader: { bold: true, fontSize: 8, alignment: 'center' }
       },
-      defaultStyle: { font: 'Helvetica', fontSize: 8, alignment: 'center' }
+      defaultStyle: { font: 'Arial', fontSize: 8, alignment: 'center' }
+    };
+
+    pdfmake.setFonts(fonts);
+    const pdfDoc = pdfmake.createPdf(docDefinition);
+    return await pdfDoc.getBuffer();
+  }
+
+  async generateDailyMarkingsPdf(fecha: string): Promise<Buffer> {
+    const marcas = await this.marcasService.findAll('', fecha, fecha);
+    
+    // Agrupar por empleado
+    const groups = new Map<string, any>();
+    marcas.forEach(m => {
+      const ficha = m.empleado?.num_ficha || 'Sin ficha';
+      if (!groups.has(ficha)) {
+        groups.set(ficha, {
+          empleado: m.empleado,
+          marcas: []
+        });
+      }
+      if (m.hora_marca) {
+        groups.get(ficha).marcas.push(m);
+      }
+    });
+
+    const contentArr: any[] = [
+      { text: `REPORTE DIARIO DE MARCACIONES\n\nFecha: ${fecha}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 10] }
+    ];
+
+    const tableBody: any[] = [
+      [
+        { text: 'Ficha', style: 'tableHeader' },
+        { text: 'Nombre Trabajador', style: 'tableHeader' },
+        { text: 'RUT', style: 'tableHeader' },
+        { text: 'Hora Marca', style: 'tableHeader' },
+        { text: 'Tipo', style: 'tableHeader' },
+        { text: 'Dispositivo', style: 'tableHeader' }
+      ]
+    ];
+
+    Array.from(groups.values()).forEach(g => {
+      const emp = g.empleado;
+      const nombre = emp ? `${emp.nombres} ${emp.apellido_paterno} ${emp.apellido_materno}` : 'N/A';
+      const rut = emp ? emp.run : 'N/A';
+      const ficha = emp ? emp.num_ficha : 'N/A';
+
+      if (g.marcas.length === 0) {
+        tableBody.push([ficha, nombre, rut, 'Sin marcas', '-', '-']);
+      } else {
+        g.marcas.forEach((m: any, idx: number) => {
+          tableBody.push([
+            idx === 0 ? ficha : '',
+            idx === 0 ? nombre : '',
+            idx === 0 ? rut : '',
+            m.hora_marca,
+            m.evento === 1 ? 'Entrada' : 'Salida',
+            m.dispositivo?.nombre || 'N/A'
+          ]);
+        });
+      }
+    });
+
+    contentArr.push({
+      table: {
+        headerRows: 1,
+        widths: ['auto', '*', 'auto', 'auto', 'auto', 'auto'],
+        body: tableBody
+      }
+    });
+
+    const fonts = {
+      Arial: {
+        normal: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italics: 'Helvetica-Oblique',
+        bolditalics: 'Helvetica-BoldOblique'
+      }
+    };
+
+    const docDefinition = {
+      pageOrientation: 'portrait',
+      content: contentArr,
+      styles: {
+        header: { fontSize: 8, bold: true },
+        subheader: { fontSize: 9, bold: true, margin: [0, 5, 0, 5] },
+        tableHeader: { bold: true, fontSize: 8, alignment: 'center' }
+      },
+      defaultStyle: { font: 'Arial', fontSize: 8 }
     };
 
     pdfmake.setFonts(fonts);

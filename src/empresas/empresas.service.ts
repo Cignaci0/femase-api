@@ -28,12 +28,12 @@ export class EmpresasService {
       where: { usuario_id: usuarioId },
       relations: ['perfil']
     });
-    if(!usuarioLogueado){
+    if (!usuarioLogueado) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
     if (allEmpresas.length > 0) {
-      if (usuario == 'superadmin' || usuarioLogueado.perfil.perfil_id ==3) {
+      if (usuario == 'superadmin' || usuarioLogueado.perfil.perfil_id == 3) {
         return {
           empresas: allEmpresas,
           mensaje: 'Usuario superadmin o fiscalizador, se envian todas las empresas'
@@ -117,7 +117,7 @@ export class EmpresasService {
       throw new NotFoundException('Empresa no encontrada');
     }
     if (empresa.urlLogo) {
-      const pathAnterior = join('C:\\Users\\Crign\\OneDrive\\Desktop\\api-femase-fmc\\imgEmpresas', empresa.urlLogo); // CAMBIAR RUTA
+      const pathAnterior = join('C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas', empresa.urlLogo); // CAMBIAR RUTA
       if (fs.existsSync(pathAnterior)) {
         fs.unlinkSync(pathAnterior);
       }
