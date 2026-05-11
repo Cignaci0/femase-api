@@ -290,6 +290,51 @@ export class EmpleadoService {
     }
   }
 
+  async cambiarNoti(idUsuario: number, noti30Entrada?: boolean, noti30Salida?: boolean) {
+    const usuario = await this.userRepository.findOne({
+      where: { usuario_id: idUsuario },
+      relations: ['empleado']
+    })
+    if (!usuario) {
+      throw new NotFoundException(`El usuario con ID ${idUsuario} no existe`)
+    }
+    const empleado = await this.empleadoRepository.findOne({
+      where: { empleado_id: usuario.empleado.empleado_id }
+    })
+    if (!empleado) {
+      throw new NotFoundException(`El empleado con ID ${idUsuario} no existe`)
+    }
+    if (noti30Entrada !== undefined) {
+      empleado.noti_30_entrada = noti30Entrada;
+    }
+    if (noti30Salida !== undefined) {
+      empleado.noti_30_salida = noti30Salida;
+    }
+    await this.empleadoRepository.save(empleado);
+    return {
+      message: 'Notificaciones cambiadas correctamente'
+    }
+  }
+  async obtenerNoti(idUsuario: number) {
+    const usuario = await this.userRepository.findOne({
+      where: { usuario_id: idUsuario },
+      relations: ['empleado']
+    })
+    if (!usuario) {
+      throw new NotFoundException(`El usuario con ID ${idUsuario} no existe`)
+    }
+    const empleado = await this.empleadoRepository.findOne({
+      where: { empleado_id: usuario.empleado.empleado_id }
+    })
+    if (!empleado) {
+      throw new NotFoundException(`El empleado con ID ${idUsuario} no existe`)
+    }
+    return {
+      noti_30_entrada: empleado.noti_30_entrada,
+      noti_30_salida: empleado.noti_30_salida
+    }
+  }
+
 }
 
 

@@ -847,11 +847,13 @@ export class MarcasService {
 
     const horarioEntrada = horarioHoy ? horarioHoy.hora_entrada : 'No asignado';
     const horarioSalida = horarioHoy ? horarioHoy.hora_salida : 'No asignado';
+    const alerta30Entrada = empleado.noti_30_entrada
+    const alerta30Salida = empleado.noti_30_salida
 
     let subject = '';
     let htmlMsg = '';
 
-    if (tipo === 2) {
+    if (tipo === 2 && alerta30Entrada === true) {
       subject = 'Alerta de no marcación 30 minutos de entrada';
       htmlMsg = `
       <p>--- Datos del empleador ---</p>
@@ -871,7 +873,7 @@ export class MarcasService {
       subject = 'Notificación derecho a desconexión';
       htmlMsg = `<p>Hola ${nombreCompleto}, Te recordamos que siendo ${fechaDeHoy} a las ${horaActual} horas, le informamos que restan 30 min para el inicio del derecho a desconexión.</p>`;
 
-    } else if (tipo === 4) {
+    } else if (tipo === 4 && alerta30Salida === true) {
       subject = 'Alerta de no marcación 30 minutos de salida';
       htmlMsg = `
       <p>--- Datos del empleador ---</p>
@@ -886,20 +888,22 @@ export class MarcasService {
       <p>Horario Salida: ${horarioSalida}</p>
       <p>Siendo el ${fechaDeHoy} a las ${horaActual} horas, usted no registra Marcación de Salida.</p>
       `;
-    }
+    } 
 
-    try {
-      await this.mailerService.sendMail({
-        to: correoEmpleado,
-        cc: correoEmpleador,
-        subject: subject,
-        html: `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          ${htmlMsg}
-        </div>`,
-      });
-    } catch (error) {
-      this.logger.error(`Error al enviar correo de alerta a ${correoEmpleado}:`, error);
+    if (htmlMsg) {
+      try {
+        await this.mailerService.sendMail({
+          to: correoEmpleado,
+          cc: correoEmpleador,
+          subject: subject,
+          html: `
+          <div style="font-family: Arial, sans-serif; color: #333;">
+            ${htmlMsg}
+          </div>`,
+        });
+      } catch (error) {
+        this.logger.error(`Error al enviar correo de alerta a ${correoEmpleado}:`, error);
+      }
     }
   }
 

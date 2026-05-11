@@ -30,7 +30,8 @@ export class UsersService {
         'perfil',
         'estado',
         'empresa',
-        'empleado'
+        'empleado',
+        'empleado.cargo'
       ],
     });
   }
@@ -72,9 +73,9 @@ export class UsersService {
     });
   }
 
-  async recuperarClave(run: string) {
+  async recuperarClave(username: string) {
     const usuario = await this.usersRepository.findOne({
-      where: { run_usuario: run, estado: { estado_id: 1 } }
+      where: { username:username, estado: { estado_id: 1 } },
     });
 
     if (!usuario) throw new HttpException('Usuario no encontrado', 404);
@@ -108,9 +109,9 @@ export class UsersService {
     }
   }
 
-  async actualizarClave(run: string, codigo: string, nuevaClave: string) {
+  async actualizarClave(username: string, codigo: string, nuevaClave: string) {
     const usuario = await this.usersRepository.findOne({
-      where: { run_usuario: run, estado: { estado_id: 1 } }
+      where: { username: username, estado: { estado_id: 1 } }
     });
 
     if (!usuario) throw new HttpException('Usuario no encontrado', 404);

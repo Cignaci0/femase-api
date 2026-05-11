@@ -161,5 +161,11 @@ export class Empleado {
 
   @OneToMany(() => Solicitude, (solicitude) => solicitude.empleado)
   solicitudes: Solicitude[];
-  
+
+  @Column({default:true})
+  noti_30_entrada:boolean
+
+  @Column({default:true})
+  noti_30_salida:boolean
+
 }

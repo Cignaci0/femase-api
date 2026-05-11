@@ -59,4 +59,14 @@ export class EmpleadoController {
   cambiarPinFirma(@Param('idUser') idUser: string, @Param('pinActual') pinActual: string, @Param('pinFirma') pinFirma: string) {
     return this.empleadoService.cambiarPinFirma(+idUser, +pinActual, +pinFirma);
   }
+
+  @Patch('cambiar-noti/:idusuario')
+  cambiarNoti(@Param('idusuario') idusuario:string, @Body('noti_30_entrada') noti_30_entrada: boolean, @Body('noti_30_salida') noti_30_salida: boolean){
+    return this.empleadoService.cambiarNoti(+idusuario, noti_30_entrada, noti_30_salida);
+  }
+
+  @Get('obtener-noti/:idusuario')
+  obtenerNoti(@Param('idusuario') idusuario:string){
+    return this.empleadoService.obtenerNoti(+idusuario);
+  }
 }
