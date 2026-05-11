@@ -87,7 +87,42 @@ export class AuthService {
       usuario_id: user.usuario_id,
       cargo: user.empleado?.cargo?.tipo_cargo || 0
     };
+  }
 
+  async refreshToken(req: any) {
+    const username = req['user'].username;
+    const user = await this.usersService.searchActiveUser(username);
 
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    }
+
+    const payload = {
+      sub: user.usuario_id,
+      username: user.username,
+      profile: user.perfil?.perfil_id,
+      num_ficha: user.empleado?.num_ficha || null,
+      nombre_completo: user.empleado ? `${user.empleado.nombres} ${user.empleado.apellido_paterno} ${user.empleado.apellido_materno}` : user.username,
+      empresa: user.empresa?.nombre_empresa || null,
+      rut: user.empleado?.run || null,
+      empresa_id: user.empresa?.empresa_id || null,
+      rut_usuario: user.run_usuario,
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
+    };
+
+    return {
+      token: await this.jwtService.signAsync(payload),
+      username: user.username,
+      profile_id: user.perfil?.perfil_id || 0,
+      profile: user.perfil?.nombre_perfil || '',
+      empresa_id: user.empresa?.empresa_id || 0,
+      empresa: user.empresa?.nombre_empresa || '',
+      num_ficha: user.empleado?.num_ficha || '',
+      rut: user.empleado?.run || '',
+      rut_usuario: user.run_usuario,
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
+    };
   }
 }
