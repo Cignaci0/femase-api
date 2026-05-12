@@ -17,5 +17,7 @@ export class CreateDocumentoDto {
     @ApiProperty({ description: 'Contenido del documento', example: 'Texto del documento...' })
     texto: string;
 
- 
+    @IsNotEmpty()
+    @ApiProperty({ description: 'ID de la empresa asociada', example: 1 })
+    empresa: any;
 }

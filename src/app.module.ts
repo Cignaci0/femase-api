@@ -74,9 +74,13 @@ import { HorasLegale } from './horas_legales/entities/horas_legale.entity';
 import { EmpleadoModule } from './empleado/empleado.module';
 import { Empleado } from './empleado/entities/empleado.entity';
 import { Documento } from './documento/entities/documento.entity';
+import { DocumentoModule } from './documento/documento.module';
 import { Firma } from './firmas/entities/firma.entity';
+import { FirmasModule } from './firmas/firmas.module';
 import { Solicitude } from './solicitudes/entities/solicitude.entity';
+import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { RegistroConexione } from './registro_conexiones/entities/registro_conexione.entity';
+import { RegistroConexionesModule } from './registro_conexiones/registro_conexiones.module';
 
 @Module({
   imports: [
@@ -181,7 +185,11 @@ import { RegistroConexione } from './registro_conexiones/entities/registro_conex
     DetalleAsistenciaModule,
     AlertasModule,
     TeletrabajoModule,
-    HorasLegalesModule
+    HorasLegalesModule,
+    DocumentoModule,
+    FirmasModule,
+    SolicitudesModule,
+    RegistroConexionesModule
   ],
   providers: [PerfilesService],
   controllers: [PerfilesController],
