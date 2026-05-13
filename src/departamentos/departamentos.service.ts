@@ -1,9 +1,14 @@
-import { BadRequestException, ConflictException, HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Departamento } from './departamento.entity';
 import { Repository } from 'typeorm';
-import { DepartamentoCreatedDto } from './dto/departamento-created.dto';
 import { UpdateDepartamentoDto } from './dto/update-departamento.dto';
+import { DepartamentoCreatedDto } from './dto/departamento-created.dto';
+import { User } from 'src/users/user.entity';
+import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { Empresa } from 'src/empresas/empresas.entity';
+const UAParser = require('ua-parser-js');
 import { SearchDeptoDto } from './dto/search-depto.dto';
 
 @Injectable()
@@ -48,14 +53,66 @@ export class DepartamentosService {
     }
   }
 
-  async crearDepartamento(departamento: Departamento, usuario: string): Promise<DepartamentoCreatedDto> {
+  async crearDepartamento(
+    departamento: Departamento, 
+    usuario: string, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<DepartamentoCreatedDto> {
     try {
       const nuevoDepartamento = this.departamentoRepository.create(departamento);
-      const guardada = this.departamentoRepository.save(nuevoDepartamento);
+      const guardada = await this.departamentoRepository.save(nuevoDepartamento);
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.departamentoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.departamentoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          // Buscamos el nombre de la empresa a la que se le creó el depto
+          const empresaId = (departamento.empresa as any).empresa_id || (departamento as any).empresa;
+          const empresaDestino = await this.departamentoRepository.manager.findOne(Empresa, {
+            where: { empresa_id: empresaId }
+          });
+
+          const parser = new UAParser(userAgent);
+          const browser = parser.getBrowser();
+          const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+
+          const registroEvento = this.departamentoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado el departamento "${guardada.nombre_departamento}" para la empresa "${empresaDestino?.nombre_empresa || 'Desconocida'}"`,
+            tipo_evento: 'Creación de Departamento',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.departamentoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
 
       return {
-        departamento_id: (await guardada).departamento_id,
-        nombre_departamento: (await guardada).nombre_departamento,
+        departamento_id: guardada.departamento_id,
+        nombre_departamento: guardada.nombre_departamento,
         mensaje: 'Departamento creado correctamente'
       }
 
@@ -75,11 +132,17 @@ export class DepartamentosService {
     }
   }
 
-  async actualizarDepto(id: number, updateDto: UpdateDepartamentoDto): Promise<any> {
-    // 1. Preload busca por ID y "mezcla" los datos nuevos con los existentes
-    const departamento = await this.departamentoRepository.preload({
-      departamento_id: id,
-      ...updateDto,
+  async actualizarDepto(
+    id: number, 
+    updateDto: UpdateDepartamentoDto, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<any> {
+    // 1. Buscamos el departamento cargando su relación con la empresa para el log
+    const departamento = await this.departamentoRepository.findOne({
+      where: { departamento_id: id },
+      relations: ['empresa']
     });
 
     // 2. Si no existe el ID, lanzamos 404
@@ -87,11 +150,54 @@ export class DepartamentosService {
       throw new NotFoundException(`El departamento con ID ${id} no existe`);
     }
 
+    // 3. Mezclamos los datos nuevos
+    this.departamentoRepository.merge(departamento, updateDto);
+
     try {
-      // 3. Guardamos los cambios (esto disparará validaciones de BD)
+      // 4. Guardamos los cambios
       const actualizada = await this.departamentoRepository.save(departamento);
 
-      // 4. Retornamos respuesta personalizada
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.departamentoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.departamentoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent);
+          const browser = parser.getBrowser();
+          const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+
+          const registroEvento = this.departamentoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del departamento "${actualizada.nombre_departamento}" de la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            tipo_evento: 'Edición de Departamento',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.departamentoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
+      // 5. Retornamos respuesta personalizada
       return {
         mensaje: 'Departamento actualizado con éxito',
         id: actualizada.departamento_id,

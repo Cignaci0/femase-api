@@ -61,12 +61,12 @@ export class EmpleadoController {
   }
 
   @Patch('cambiar-noti/:idusuario')
-  cambiarNoti(@Param('idusuario') idusuario:string, @Body('noti_30_entrada') noti_30_entrada: boolean, @Body('noti_30_salida') noti_30_salida: boolean){
+  cambiarNoti(@Param('idusuario') idusuario: string, @Body('noti_30_entrada') noti_30_entrada: boolean, @Body('noti_30_salida') noti_30_salida: boolean) {
     return this.empleadoService.cambiarNoti(+idusuario, noti_30_entrada, noti_30_salida);
   }
 
   @Get('obtener-noti/:idusuario')
-  obtenerNoti(@Param('idusuario') idusuario:string){
+  obtenerNoti(@Param('idusuario') idusuario: string) {
     return this.empleadoService.obtenerNoti(+idusuario);
   }
 }

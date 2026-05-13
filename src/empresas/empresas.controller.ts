@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors, Res, Ip, Headers } from '@nestjs/common';
 import type { Response } from 'express';
 import { EmpresasService } from './empresas.service';
 import { Empresa } from './empresas.entity';
@@ -7,8 +7,6 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
-
-
 
 @Controller('empresas')
 @UseGuards(AuthGuard)
@@ -25,44 +23,59 @@ export class EmpresasController {
   }
 
   @Post('crear')
-  create(@Body() crearEmpresa: Empresa) {
-    return this.empresaService.create(crearEmpresa);
+  create(
+    @Body() crearEmpresa: Empresa,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empresaService.create(crearEmpresa, idUsuario, ip, userAgent);
   }
 
   @Patch('actualizar/:id')
-  actualizar(@Param('id') id: string, @Body() updateDto: UpdateEmpresaDto) {
-    return this.empresaService.actualizarEmpresa(+id, updateDto);
+  actualizar(
+    @Param('id') id: string, 
+    @Body() updateDto: UpdateEmpresaDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empresaService.actualizarEmpresa(+id, updateDto, idUsuario, ip, userAgent);
   }
 
   @Patch('actualizarHorario/:id/:horario')
-  actualizarHorarioEmpresa(@Param('id') id: string, @Param('horario') horario: string) {
-    return this.empresaService.actualizarHorario(+id, +horario);
+  actualizarHorarioEmpresa(
+    @Param('id') id: string, 
+    @Param('horario') horario: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empresaService.actualizarHorario(+id, +horario, idUsuario, ip, userAgent);
   }
 
   @Post(':id/logo')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './imgEmpresas',
-        filename: (req, file, cb) => {
-          const empresaId = req.params.id;
-          const randomName = Date.now();
-          cb(null, `empresa_${empresaId}_${randomName}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
-          return cb(new Error('Formato de archivo no permitido'), false);
-        }
-        cb(null, true);
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './imgEmpresas',
+      filename: (req, file, cb) => {
+        const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
+        cb(null, `${randomName}${extname(file.originalname)}`);
       },
     }),
-  )
+  }))
   async uploadLogo(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
-    return this.empresaService.actualizarLogo(id, file.filename);
+    const idUsuario = req.user.sub;
+    return this.empresaService.actualizarLogo(id, file.filename, idUsuario, ip, userAgent);
   }
 
   @Get(':id/logo')

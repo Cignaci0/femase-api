@@ -61,6 +61,7 @@ import { Ausencia } from './ausencias/entities/ausencia.entity';
 import { AutorizaHorasExtrasModule } from './autoriza_horas_extras/autoriza_horas_extras.module';
 import { AutorizaHorasExtra } from './autoriza_horas_extras/entities/autoriza_horas_extra.entity';
 import { RegistroEventoModule } from './registro_evento/registro_evento.module';
+import { RegistroEvento } from './registro_evento/entities/registro_evento.entity';
 import { DetalleAsistenciaModule } from './detalle-asistencia/detalle-asistencia.module';
 import { DetalleAsistencia } from './detalle-asistencia/entities/detalle-asistencia.entity';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -131,7 +132,8 @@ import { RegistroConexionesModule } from './registro_conexiones/registro_conexio
         Documento,
         Firma,
         Solicitude,
-        RegistroConexione
+        RegistroConexione,
+        RegistroEvento
       ]
     }),
     MailerModule.forRoot({

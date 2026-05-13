@@ -1,5 +1,8 @@
+import { User } from "../user.entity";
+
 export class CreateUserDto {
-  usuario_id: number;
-  usuario: string;
-  mensaje: string;
+  idUsuario: number;
+  usuario: User;
+  ip: string;
+  userAgent: string;
 }

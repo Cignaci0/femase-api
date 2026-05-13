@@ -1,6 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
 
-@Entity({ name: 'registro_evento', schema:'db_fmc' })
+@Entity({ name: 'registros_eventos', schema:'db_fmc' })
 export class RegistroEvento {
     @PrimaryGeneratedColumn()
     id: number;
@@ -27,13 +27,13 @@ export class RegistroEvento {
     browser: string;
 
     @Column()
-    empresa: number;
+    empresa: string;
 
-    @Column()
-    depto: number;
+    @Column({nullable:true})
+    depto: string;
 
-    @Column()
-    cenco: number;
+    @Column({nullable:true})
+    cenco: string;
 
     @Column()
     rut: string;

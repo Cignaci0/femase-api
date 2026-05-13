@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, HttpException, Injectable, InternalServerErrorException, NotFoundException, Param, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity';
-import { LessThan, Like, Repository } from 'typeorm';
+import { In, LessThan, Like, Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as bcrypt from 'bcrypt';
@@ -9,6 +9,10 @@ import { UpdateUsuarioDto } from './dto/update-user.dto';
 import { SearchUserDto } from './dto/search-user.dto';
 import { Cenco } from 'src/cencos/cenco.entity';
 import { Cron } from '@nestjs/schedule';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { Empresa } from 'src/empresas/empresas.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class UsersService {
@@ -75,7 +79,7 @@ export class UsersService {
 
   async recuperarClave(username: string) {
     const usuario = await this.usersRepository.findOne({
-      where: { username:username, estado: { estado_id: 1 } },
+      where: { username: username, estado: { estado_id: 1 } },
     });
 
     if (!usuario) throw new HttpException('Usuario no encontrado', 404);
@@ -148,21 +152,73 @@ export class UsersService {
     return { message: 'Contraseña actualizada correctamente' };
   }
 
-  async crearUsuario(usuario: User): Promise<CreateUserDto> {
+  async crearUsuario(idUsuario: number, usuario: User, ip: string, userAgent: string) {
     try {
       const salt = await bcrypt.genSalt();
       const nuevo = this.usersRepository.create(usuario);
       const claveHash = nuevo.password;
       nuevo.password = await bcrypt.hash(claveHash, salt);
+      const existe = await this.usersRepository.findOne({
+        where: {
+          username: nuevo.username
+        }
+      })
+      if (existe) {
+        throw new HttpException(`El username ${nuevo.username} ya existe`, 400);
+      }
       const guardada = this.usersRepository.save(nuevo);
 
+      //DATOS PARA EL REGISTRO DE EVENTOS
+      const usuarioCreador = await this.usersRepository.findOne({
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      let empleado: Empleado | null = null;
+      if (usuarioCreador?.empleado?.empleado_id) {
+        empleado = await this.usersRepository.manager.findOne(Empleado, {
+          where: { empleado_id: usuarioCreador.empleado.empleado_id },
+          relations: ['empresa', 'cenco', 'cenco.departamento']
+        });
+      }
+
+      // Buscamos el nombre de la empresa del nuevo usuario para el log
+      const empresaId = (nuevo.empresa as any)?.empresa_id || (nuevo as any).empresa_id;
+      const empresaDestino = await this.usersRepository.manager.findOne(Empresa, {
+        where: { empresa_id: empresaId }
+      });
+
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+      const sistemaOperativo = os.name || 'Desconocido';
+
+      //Crear Registro de evento
+      const registroEvento = this.usersRepository.manager.create(RegistroEvento, {
+        usuario: usuarioCreador?.username,
+        evento: `El usuario ${usuarioCreador?.username} perteneciente a la empresa ${usuarioCreador?.empresa?.nombre_empresa} ha creado al usuario ${nuevo.username} de la empresa ${empresaDestino?.nombre_empresa || 'Desconocida'}`,
+        tipo_evento: 'Creación',
+        ip: ip,
+        fecha: new Date(),
+        hora: new Date().toTimeString().split(' ')[0],
+        sistema_operativo: sistemaOperativo,
+        browser: navegador,
+        empresa: empleado?.empresa?.nombre_empresa || usuarioCreador?.empresa?.nombre_empresa,
+        depto: empleado?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+        cenco: empleado?.cenco?.nombre_cenco || "Sin Cenco",
+        rut: usuarioCreador?.run_usuario
+      })
+      await this.usersRepository.manager.save(registroEvento)
       return {
-        usuario_id: (await guardada).usuario_id,
-        usuario: (await guardada).username,
-        mensaje: 'Usuario creadc correctamente'
+        idUsuario: (await guardada).usuario_id,
+        message: 'Usuario creado exitosamente'
       }
     } catch (error) {
       console.error("Error al crear usuario:", error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
       if (error.code === '23505') {
         throw new ConflictException('El usuario ya existe o el identificador está duplicado');
       }
@@ -170,8 +226,6 @@ export class UsersService {
       if (error.name === 'ValidationError') {
         throw new BadRequestException('Los datos proporcionados no son válidos');
       }
-
-      throw new InternalServerErrorException('Error crítico al crear el usuario en la base de datos');
     }
   }
 
@@ -239,22 +293,57 @@ export class UsersService {
     }
   }
 
-
-
-
-
-  async actualizarUsuario(id: number, updateDto: UpdateUsuarioDto): Promise<any> {
-    const usuario = await this.usersRepository.preload({
-      usuario_id: id,
-      ...updateDto,
+  async actualizarUsuario(idUsuario: number, id: number, updateDto: UpdateUsuarioDto, ip: string, userAgent: string): Promise<any> {
+    const usuario = await this.usersRepository.findOne({
+      where: { usuario_id: id },
+      relations: ['empresa']
     });
 
     if (!usuario) {
       throw new NotFoundException(`El usuario con ID ${id} no existe`);
     }
 
+    this.usersRepository.merge(usuario, updateDto);
+
     try {
       const actualizada = await this.usersRepository.save(usuario);
+
+      //DATOS PARA EL REGISTRO DE EVENTOS
+      const usuarioCreador = await this.usersRepository.findOne({
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      let empleado: Empleado | null = null;
+      if (usuarioCreador?.empleado?.empleado_id) {
+        empleado = await this.usersRepository.manager.findOne(Empleado, {
+          where: { empleado_id: usuarioCreador.empleado.empleado_id },
+          relations: ['empresa', 'cenco', 'cenco.departamento']
+        });
+      }
+
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+      const sistemaOperativo = os.name || 'Desconocido';
+
+      //Crear Registro de evento
+      const registroEvento = this.usersRepository.manager.create(RegistroEvento, {
+        usuario: usuarioCreador?.username,
+        evento: `El usuario ${usuarioCreador?.username} perteneciente a la empresa ${usuarioCreador?.empresa?.nombre_empresa} ha editado al usuario ${actualizada.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'}`,
+        tipo_evento: 'Edición',
+        ip: ip,
+        fecha: new Date(),
+        hora: new Date().toTimeString().split(' ')[0],
+        sistema_operativo: sistemaOperativo,
+        browser: navegador,
+        empresa: empleado?.empresa?.nombre_empresa || usuarioCreador?.empresa?.nombre_empresa,
+        depto: empleado?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+        cenco: empleado?.cenco?.nombre_cenco || "Sin Cenco",
+        rut: usuarioCreador?.run_usuario
+      })
+      await this.usersRepository.manager.save(registroEvento)
 
       return {
         mensaje: 'Usuario actualizado con éxito',
@@ -271,16 +360,60 @@ export class UsersService {
   }
 
 
-  async asignarCenco(userId: number, cencoIds: number[]) {
+  async asignarCenco(userId: number, cencoIds: number[], idUsuarioCreador: number, ip: string, userAgent: string) {
     const usuario = await this.usersRepository.findOne({
       where: { usuario_id: userId },
-      relations: ['cencos']
+      relations: ['cencos', 'empresa']
     });
 
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
 
+    const cencosDetalle = await this.usersRepository.manager.find(Cenco, {
+      where: { cenco_id: In(cencoIds) }
+    });
+    const nombresCencos = cencosDetalle.map(c => c.nombre_cenco).join(', ');
+
     usuario.cencos = cencoIds.map(id => ({ cenco_id: id } as Cenco));
-    return await this.usersRepository.save(usuario);
+    const resultado = await this.usersRepository.save(usuario);
+
+    // DATOS PARA LA AUDITORÍA
+    const autor = await this.usersRepository.findOne({
+      where: { usuario_id: idUsuarioCreador },
+      relations: ['empleado', 'empresa']
+    });
+
+    let empleadoAutor: Empleado | null = null;
+    if (autor?.empleado?.empleado_id) {
+      empleadoAutor = await this.usersRepository.manager.findOne(Empleado, {
+        where: { empleado_id: autor.empleado.empleado_id },
+        relations: ['empresa', 'cenco', 'cenco.departamento']
+      });
+    }
+
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+    const sistemaOperativo = os.name || 'Desconocido';
+
+    const registroEvento = this.usersRepository.manager.create(RegistroEvento, {
+      usuario: autor?.username,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa} le ha asignado los cencos (${nombresCencos}) al usuario ${usuario.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'}`,
+      tipo_evento: 'Asignación',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: sistemaOperativo,
+      browser: navegador,
+      empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+      depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: autor?.run_usuario
+    });
+
+    await this.usersRepository.manager.save(registroEvento);
+
+    return resultado;
   }
 
 
@@ -298,23 +431,59 @@ export class UsersService {
     return usuario.cencos;
   }
 
-  async cambiarpasswors(contrasena_actual: string, contrasena_nueva: string, id: number) {
+  async cambiarpasswors(contrasena_actual: string, contrasena_nueva: string, id: number, ip: string, userAgent: string) {
     const usuario = await this.usersRepository.findOne({
-      where: {
-        usuario_id: id
-      }
-    })
+      where: { usuario_id: id },
+      relations: ['empresa', 'empleado'] // Cargamos relaciones para auditoría
+    });
+
     if (!usuario) {
       throw new NotFoundException('Usuario no encontrado');
     }
+
     const isPasswordValid = await bcrypt.compare(contrasena_actual, usuario.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Contraseña actual incorrecta');
     }
+
     const salt = await bcrypt.genSalt();
     const nuevaContrasenaHash = await bcrypt.hash(contrasena_nueva, salt);
     usuario.password = nuevaContrasenaHash;
     await this.usersRepository.save(usuario);
+
+    // --- AUDITORÍA ---
+    let empleado: Empleado | null = null;
+    if (usuario?.empleado?.empleado_id) {
+      empleado = await this.usersRepository.manager.findOne(Empleado, {
+        where: { empleado_id: usuario.empleado.empleado_id },
+        relations: ['empresa', 'cenco', 'cenco.departamento']
+      });
+    }
+
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+    const sistemaOperativo = os.name || 'Desconocido';
+
+    const registroEvento = this.usersRepository.manager.create(RegistroEvento, {
+      usuario: usuario.username,
+      evento: `El usuario ${usuario.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'} ha cambiado su contraseña correctamente.`,
+      tipo_evento: 'Cambio de Clave',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: sistemaOperativo,
+      browser: navegador,
+      empresa: empleado?.empresa?.nombre_empresa || usuario?.empresa?.nombre_empresa,
+      depto: empleado?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleado?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: usuario.run_usuario
+    });
+
+    await this.usersRepository.manager.save(registroEvento);
+    // -----------------
+
     return { message: 'Contraseña actualizada correctamente' };
   }
 
