@@ -1,22 +1,37 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put, ParseIntPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, ParseIntPipe, Query, UseGuards, Req, Ip, Headers } from '@nestjs/common';
 import { EmpleadoService } from './empleado.service';
 import { CreateEmpleadoDto } from './dto/create-empleado.dto';
 import { UpdateEmpleadoDto } from './dto/update-empleado.dto';
 import { Empleado } from './entities/empleado.entity';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('empleado')
+@UseGuards(AuthGuard)
 export class EmpleadoController {
   constructor(private readonly empleadoService: EmpleadoService) { }
 
 
   @Patch('actualizar/:id')
-  update(@Param('id') id: string, @Body() updateEmpleadoDto: UpdateEmpleadoDto) {
-    return this.empleadoService.update(+id, updateEmpleadoDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateEmpleadoDto: UpdateEmpleadoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empleadoService.update(+id, updateEmpleadoDto, idUsuario, ip, userAgent);
   }
 
   @Post()
-  create(@Body() createEmpleadoDto: Empleado) {
-    return this.empleadoService.create(createEmpleadoDto);
+  create(
+    @Body() createEmpleadoDto: Empleado,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empleadoService.create(createEmpleadoDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -56,8 +71,14 @@ export class EmpleadoController {
   }
 
   @Patch('cambiar-pin/:idUser/:pinActual/:pinFirma')
-  cambiarPinFirma(@Param('idUser') idUser: string, @Param('pinActual') pinActual: string, @Param('pinFirma') pinFirma: string) {
-    return this.empleadoService.cambiarPinFirma(+idUser, +pinActual, +pinFirma);
+  cambiarPinFirma(
+    @Param('idUser') idUser: string, 
+    @Param('pinActual') pinActual: string, 
+    @Param('pinFirma') pinFirma: string,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    return this.empleadoService.cambiarPinFirma(+idUser, +pinActual, +pinFirma, ip, userAgent);
   }
 
   @Patch('cambiar-noti/:idusuario')

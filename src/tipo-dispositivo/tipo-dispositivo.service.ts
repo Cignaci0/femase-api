@@ -1,10 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TipoDispositivo } from './entities/tipo-dispositivo.entity';
 import { CreateTipoDispositivoDto } from './dto/create-tipo-dispositivo.dto';
 import { UpdateTipoDispositivoDto } from './dto/update-tipo-dispositivo.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { TipoDispositivo } from './entities/tipo-dispositivo.entity';
-import { Repository } from 'typeorm';
 import { SearchTipoDispositivoDto } from './dto/search-tipo-dispositivo.dto';
+import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { Empleado } from 'src/empleado/entities/empleado.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class TipoDispositivoService {
@@ -13,28 +17,74 @@ export class TipoDispositivoService {
     private tipoDispositivoRepository: Repository<TipoDispositivo>
   ) { }
 
-  async create(createTipoDispositivoDto: TipoDispositivo, usuario: string): Promise<CreateTipoDispositivoDto> {
+  async create(
+    createTipoDispositivoDto: TipoDispositivo, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<CreateTipoDispositivoDto> {
     try {
       const nuevo = this.tipoDispositivoRepository.create(createTipoDispositivoDto);
-      nuevo.usuario_creador = usuario;
-      const guardada = this.tipoDispositivoRepository.save(nuevo);
+      
+      // Buscamos al usuario para asignarlo como creador (manteniendo compatibilidad con tu lógica actual)
+      const autor = await this.tipoDispositivoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+      
+      nuevo.usuario_creador = autor?.username || 'Desconocido';
+      const guardada = await this.tipoDispositivoRepository.save(nuevo);
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.tipoDispositivoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent);
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.tipoDispositivoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado el tipo de dispositivo "${guardada.nombre_tipo}"`,
+            tipo_evento: 'Creación de Tipo Dispositivo',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.tipoDispositivoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
 
       return {
-        tipoDispositivoId: (await guardada).tipo_dispositivo_id,
-        nombreTipoDispositivo: (await guardada).nombre_tipo,
+        tipoDispositivoId: guardada.tipo_dispositivo_id,
+        nombreTipoDispositivo: guardada.nombre_tipo,
         mensaje: 'Tipo de dispositivo creado correctamente'
       }
 
     } catch (error) {
       if (error.code === '23505') {
-        throw new ConflictException('La empresa ya existe o el identificador está duplicado');
+        throw new ConflictException('El tipo de dispositivo ya existe o el identificador está duplicado');
       }
 
       if (error.name === 'ValidationError') {
         throw new BadRequestException('Los datos proporcionados no son válidos');
       }
 
-      throw new InternalServerErrorException('Error crítico al crear la empresa en la base de datos');
+      throw new InternalServerErrorException('Error crítico al crear el tipo de dispositivo en la base de datos');
     }
   }
 
@@ -59,10 +109,16 @@ export class TipoDispositivoService {
     }
   }
 
-  async update(id: number, updateTipoDispositivoDto: UpdateTipoDispositivoDto): Promise<any> {
-    const tipoDis = await this.tipoDispositivoRepository.preload({
-      tipo_dispositivo_id: id,
-      ...updateTipoDispositivoDto,
+  async update(
+    id: number, 
+    updateTipoDispositivoDto: UpdateTipoDispositivoDto, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<any> {
+    // 1. Buscamos el tipo de dispositivo
+    const tipoDis = await this.tipoDispositivoRepository.findOne({
+      where: { tipo_dispositivo_id: id }
     });
 
     // 2. Si no existe el ID, lanzamos 404
@@ -70,13 +126,55 @@ export class TipoDispositivoService {
       throw new NotFoundException(`El tipo de dispositivo con ID ${id} no existe`);
     }
 
+    // 3. Mezclamos los datos nuevos
+    this.tipoDispositivoRepository.merge(tipoDis, updateTipoDispositivoDto);
+
     try {
-      // 3. Guardamos los cambios (esto disparará validaciones de BD)
+      // 4. Guardamos los cambios
       const actualizada = await this.tipoDispositivoRepository.save(tipoDis);
 
-      // 4. Retornamos respuesta personalizada
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.tipoDispositivoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.tipoDispositivoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent);
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.tipoDispositivoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del tipo de dispositivo "${actualizada.nombre_tipo}"`,
+            tipo_evento: 'Edición de Tipo Dispositivo',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.tipoDispositivoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
+      // 5. Retornamos respuesta personalizada
       return {
-        mensaje: 'Tipo de dispositivo actualizado con exito',
+        mensaje: 'Tipo de dispositivo actualizado con éxito',
         id: actualizada.tipo_dispositivo_id,
         nombre: actualizada.nombre_tipo,
         descripcion: actualizada.descripcion

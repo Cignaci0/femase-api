@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Ip, Headers, UseGuards } from '@nestjs/common';
+import { AuthGuard } from 'src/auth/auth.guard';
 import { DocumentoService } from './documento.service';
 import { CreateDocumentoDto } from './dto/create-documento.dto';
 import { UpdateDocumentoDto } from './dto/update-documento.dto';
@@ -8,8 +9,15 @@ export class DocumentoController {
   constructor(private readonly documentoService: DocumentoService) { }
 
   @Post()
-  create(@Body() createDocumentoDto: CreateDocumentoDto) {
-    return this.documentoService.create(createDocumentoDto);
+  @UseGuards(AuthGuard)
+  create(
+    @Body() createDocumentoDto: CreateDocumentoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user?.sub;
+    return this.documentoService.create(createDocumentoDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -24,12 +32,27 @@ export class DocumentoController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDocumentoDto: UpdateDocumentoDto) {
-    return this.documentoService.update(+id, updateDocumentoDto);
+  @UseGuards(AuthGuard)
+  update(
+    @Param('id') id: string,
+    @Body() updateDocumentoDto: UpdateDocumentoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user?.sub;
+    return this.documentoService.update(+id, updateDocumentoDto, idUsuario, ip, userAgent);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.documentoService.remove(+id);
+  @UseGuards(AuthGuard)
+  remove(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user?.sub;
+    return this.documentoService.remove(+id, idUsuario, ip, userAgent);
   }
 }

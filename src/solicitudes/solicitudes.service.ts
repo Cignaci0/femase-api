@@ -8,6 +8,8 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
 import { User } from 'src/users/user.entity';
 import { MailerService } from '@nestjs-modules/mailer';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class SolicitudesService {
@@ -19,7 +21,8 @@ export class SolicitudesService {
     private readonly mailService: MailerService,
 
   ) { }
-  async create(createSolicitudeDto: CreateSolicitudeDto) {
+
+  async create(createSolicitudeDto: CreateSolicitudeDto, idUsuario?: number, ip?: string, userAgent?: string) {
     const usuario = await this.solicitudRepository.manager.findOne(User, {
       where: {
         usuario_id: createSolicitudeDto.idUsuario,
@@ -113,12 +116,53 @@ export class SolicitudesService {
       console.error('Error enviando correo:', error);
     }
 
-    return await this.solicitudRepository.save(solictud);
+    const guardado = await this.solicitudRepository.save(solictud);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.solicitudRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.solicitudRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.solicitudRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado una solicitud de firma: "${createSolicitudeDto.tipo}" para el empleado "${usuario?.nombres} ${usuario?.apellido_paterno}".`,
+          tipo_evento: 'Creación Solicitud Firma',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.solicitudRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardado;
   }
 
   async findAll(id_empresa?: number) {
     const whereCondition = id_empresa ? { empleado: { empresa: { empresa_id: id_empresa } } } : {};
-    
+
     return await this.solicitudRepository.find({
       where: whereCondition,
       relations: ['empleado', 'usuario'],
@@ -139,9 +183,9 @@ export class SolicitudesService {
     return `This action returns a #${id} solicitude`;
   }
 
-  async update(id: number, updateSolicitudeDto: UpdateSolicitudeDto) {
+  async update(id: number, updateSolicitudeDto: UpdateSolicitudeDto, idUsuario?: number, ip?: string, userAgent?: string) {
     const solicitud = await this.solicitudRepository.findOne({ where: { id }, relations: { empleado: true, usuario: true } });
-    
+
     if (!solicitud) {
       throw new Error(`Solicitud no encontrada`);
     }
@@ -157,11 +201,11 @@ export class SolicitudesService {
       timeZone: 'America/Santiago',
       hour12: false,
     });
-const usuario = await this.solicitudRepository.manager.findOne(User, {
-  where: {
-    usuario_id: solicitud.usuario?.usuario_id,
-  },
-});
+    const usuario = await this.solicitudRepository.manager.findOne(User, {
+      where: {
+        usuario_id: solicitud.usuario?.usuario_id,
+      },
+    });
     if (updateSolicitudeDto.estado === "R") {
       await this.mailService.sendMail({
         to: empleado?.email_laboral,
@@ -224,7 +268,52 @@ const usuario = await this.solicitudRepository.manager.findOne(User, {
     }
 
     Object.assign(solicitud, updateSolicitudeDto);
-    return await this.solicitudRepository.save(solicitud);
+    const guardado = await this.solicitudRepository.save(solicitud);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.solicitudRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.solicitudRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        let estadoTexto = '';
+        if (updateSolicitudeDto.estado === 'A') estadoTexto = 'Aprobado';
+        if (updateSolicitudeDto.estado === 'R') estadoTexto = 'Rechazado';
+
+        const registroEvento = this.solicitudRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma del empleado "${solicitud.empleado?.nombres} ${solicitud.empleado?.apellido_paterno}". Estado: ${estadoTexto}.`,
+          tipo_evento: 'Resolución Solicitud Firma',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.solicitudRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardado;
   }
 
   remove(id: number) {

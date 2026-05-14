@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Ip, Headers, UseGuards } from '@nestjs/common';
+import { AuthGuard } from 'src/auth/auth.guard';
 import { FirmasService } from './firmas.service';
 import { CreateFirmaDto } from './dto/create-firma.dto';
 import { UpdateFirmaDto } from './dto/update-firma.dto';
@@ -8,8 +9,15 @@ export class FirmasController {
   constructor(private readonly firmasService: FirmasService) { }
 
   @Post()
-  create(@Body() createFirmaDto: CreateFirmaDto) {
-    return this.firmasService.create(createFirmaDto);
+  @UseGuards(AuthGuard)
+  create(
+    @Body() createFirmaDto: CreateFirmaDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user?.sub;
+    return this.firmasService.create(createFirmaDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -24,13 +32,18 @@ export class FirmasController {
   }
 
   @Patch(':id')
+  @UseGuards(AuthGuard)
   aprovarRechazarFirma(
     @Param('id') id: string,
     @Body() updateFirmaDto: UpdateFirmaDto,
     @Body('usuario_id') usuario_id: number,
-    @Body('pin') pin: number
+    @Body('pin') pin: number,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
-    return this.firmasService.aprovarRechazarFirma(+id, updateFirmaDto, usuario_id, pin);
+    const idUsuario = req.user?.sub;
+    return this.firmasService.aprovarRechazarFirma(+id, updateFirmaDto, usuario_id, pin, idUsuario, ip, userAgent);
   }
 
   @Delete(':id')

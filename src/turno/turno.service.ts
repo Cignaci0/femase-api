@@ -10,6 +10,9 @@ import { Semana } from 'src/semana/entities/semana.entity';
 import { Horario } from 'src/horario/entities/horario.entity';
 import { DetalleTurno } from 'src/detalle-turno/entities/detalle-turno.entity';
 import { AuditoriaTurno } from 'src/detalle-turno/entities/auditoria-turno.entity';
+import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 
 @Injectable()
@@ -31,10 +34,61 @@ export class TurnoService {
     private auditoriaTurnoRepository: Repository<AuditoriaTurno>
   ) { }
 
-  async create(createTurnoDto: Turno, usuario: string) {
+  async create(
+    createTurnoDto: Turno, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ) {
     try {
       const nuevo = this.turnoRepository.create(createTurnoDto);
       const guardada = await this.turnoRepository.save(nuevo);
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.turnoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.turnoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          // Buscamos la empresa destino para el log
+          const empresaId = (createTurnoDto as any).empresa_id || (createTurnoDto.empresa as any)?.empresa_id;
+          const empresaDestino = await this.turnoRepository.manager.findOne('Empresa', {
+            where: { empresa_id: empresaId }
+          });
+
+          const parser = new UAParser(userAgent);
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado el turno "${guardada.nombre}" para la empresa "${(empresaDestino as any)?.nombre_empresa || 'Desconocida'}"`,
+            tipo_evento: 'Creación de Turno',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.turnoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
       return {
         turno_id: guardada.turno_id,
         nombre: guardada.nombre,
@@ -68,19 +122,69 @@ export class TurnoService {
     });
   }
 
-  async update(id: number, updateTurnoDto: UpdateTurnoDto) {
-    const result = await this.turnoRepository.preload({
-      turno_id: id,
-      ...updateTurnoDto,
+  async update(
+    id: number, 
+    updateTurnoDto: UpdateTurnoDto | any, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<any> {
+    // 1. Buscamos el turno cargando la relación empresa
+    const turno = await this.turnoRepository.findOne({
+      where: { turno_id: id },
+      relations: ['empresa']
     });
 
-    if (!result) {
-      throw new NotFoundException(`EL registro con ID ${id} no existe`);
+    if (!turno) {
+      throw new NotFoundException(`El turno con ID ${id} no existe`);
     }
 
-    try {
-      const actualizada = await this.turnoRepository.save(result);
+    // 2. Mezclamos los datos
+    this.turnoRepository.merge(turno, updateTurnoDto);
 
+    try {
+      const actualizada = await this.turnoRepository.save(turno);
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.turnoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.turnoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent);
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del turno "${actualizada.nombre}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            tipo_evento: 'Edición de Turno',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.turnoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
+      // Lógica de desasignación si cambia la empresa
       if (updateTurnoDto.empresa) {
         const nuevaEmpresaId = typeof updateTurnoDto.empresa === 'object'
           ? (updateTurnoDto.empresa as any).empresa_id
@@ -116,20 +220,30 @@ export class TurnoService {
       }
 
       return {
-        mensaje: 'Registro actualizado con éxito',
-        id: actualizada.turno_id
+        mensaje: 'Turno actualizado con éxito',
+        id: actualizada.turno_id,
+        nombre: actualizada.nombre
       };
     } catch (error) {
       if (error.code === '23505') {
-        throw new ConflictException('El nombre ya pertenece a otro registro');
+        throw new ConflictException('El nombre ya pertenece a otro turno');
       }
-      throw new InternalServerErrorException('Error al actualizar el registro');
+      throw new InternalServerErrorException('Error al actualizar el turno');
     }
   }
 
 
-  async asignarEmpleados(turnoId: number, empleadosIds: number[]) {
-    const turno = await this.turnoRepository.findOne({ where: { turno_id: turnoId } });
+  async asignarEmpleados(
+    turnoId: number, 
+    empleadosIds: number[], 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ) {
+    const turno = await this.turnoRepository.findOne({ 
+      where: { turno_id: turnoId },
+      relations: ['empresa']
+    });
     if (!turno) {
       throw new NotFoundException('Turno no encontrado');
     }
@@ -146,43 +260,92 @@ export class TurnoService {
       await this.empleadoRepository.save(empleadosActuales);
     }
 
+    let mensajeAuditoria = '';
+    let totalAfectados = 0;
+
     // 3. Si mandaron un array vacío, terminamos aquí
     if (!empleadosIds || empleadosIds.length === 0) {
-      return {
-        mensaje: 'Turno desasignado de todos los empleados con éxito',
-        turno_id: turno.turno_id,
-        empleados_actualizados: empleadosActuales.length
-      };
+      mensajeAuditoria = `El usuario ha desasignado a todos los empleados del turno "${turno.nombre}"`;
+      totalAfectados = empleadosActuales.length;
+    } else {
+      // 4. Si mandaron IDs, buscamos esos empleados y les asignamos el turno
+      const nuevosEmpleados = await this.empleadoRepository.find({
+        where: { empleado_id: In(empleadosIds) }
+      });
+
+      if (nuevosEmpleados.length === 0) {
+        throw new NotFoundException('No se encontraron empleados con los IDs proporcionados');
+      }
+
+      nuevosEmpleados.forEach(emp => {
+        emp.turno = turno;
+        emp.fecha_asignacion_turno = new Date();
+      });
+      await this.empleadoRepository.save(nuevosEmpleados);
+      
+      mensajeAuditoria = `El usuario ha asignado ${nuevosEmpleados.length} empleados al turno "${turno.nombre}"`;
+      totalAfectados = nuevosEmpleados.length;
     }
 
-    // 4. Si mandaron IDs, buscamos esos empleados y les asignamos el turno
-    const nuevosEmpleados = await this.empleadoRepository.find({
-      where: { empleado_id: In(empleadosIds) }
-    });
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.turnoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
 
-    if (nuevosEmpleados.length === 0) {
-      throw new NotFoundException('No se encontraron empleados con los IDs proporcionados');
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.turnoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent);
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ${mensajeAuditoria.replace('El usuario', '')} perteneciente a la empresa "${turno.empresa?.nombre_empresa || 'Desconocida'}"`,
+          tipo_evento: 'Asignación Empleados Turno',
+          ip: ip,
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.turnoRepository.manager.save(registroEvento);
+      }
     }
-
-    nuevosEmpleados.forEach(emp => {
-      emp.turno = turno;
-      emp.fecha_asignacion_turno = new Date();
-    });
-    await this.empleadoRepository.save(nuevosEmpleados);
+    // -----------------
 
     return {
-      mensaje: 'Empleados asignados al turno con éxito',
+      mensaje: empleadosIds?.length > 0 ? 'Empleados asignados al turno con éxito' : 'Turno desasignado de todos los empleados con éxito',
       turno_id: turno.turno_id,
-      empleados_actualizados: nuevosEmpleados.length
+      empleados_actualizados: totalAfectados
     };
   }
 
 
-  async asignarCenco(turnoId: number, cencoId: number) {
+  async asignarCenco(
+    turnoId: number, 
+    cencoId: number, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ) {
     const turno = await this.turnoRepository.findOne({
       where: {
         turno_id: turnoId
-      }
+      },
+      relations: ['empresa']
     })
     if (!turno) {
       throw new NotFoundException('Turno no encontrado');
@@ -191,20 +354,70 @@ export class TurnoService {
       where: {
         cenco_id: cencoId
       },
-      relations: ['turnos']
+      relations: ['turnos', 'departamento', 'departamento.empresa']
     })
     if (!cenco) {
-      throw new NotFoundException("cenco no encontrado")
+      throw new NotFoundException("Centro de costo no encontrado")
     }
 
-    const existeTurno = cenco.turnos.find(turno => turno.turno_id === turnoId)
+    const existeTurno = cenco.turnos.find(t => t.turno_id === turnoId)
     if (!existeTurno) {
       cenco.turnos.push(turno)
     }
-    return await this.cencoRepository.save(cenco)
+    
+    const guardada = await this.cencoRepository.save(cenco);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.turnoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.turnoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent);
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha asignado el turno "${turno.nombre}" al centro de costo "${cenco.nombre_cenco}" perteneciente a la empresa "${cenco.departamento?.empresa?.nombre_empresa || 'Desconocida'}"`,
+          tipo_evento: 'Asignación Cenco Turno',
+          ip: ip,
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.turnoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardada;
   }
 
-  async asignarHorario(id_turno: number, id_dia: number[], id_horario: number[], usuario: string) {
+  async asignarHorario(
+    id_turno: number, 
+    id_dia: number[], 
+    id_horario: number[], 
+    usuario: string,
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ) {
     if (id_dia.length !== id_horario.length) {
       throw new BadRequestException('La lista de días y la lista de horarios deben tener exactamente la misma cantidad de elementos.');
     }
@@ -212,7 +425,7 @@ export class TurnoService {
     // PASO 2: Buscar que el Turno de verdad exista en la base de datos.
     const turno = await this.turnoRepository.findOne({
       where: { turno_id: id_turno },
-      relations: ['empleados']
+      relations: ['empleados', 'empresa']
     });
 
     if (!turno) {
@@ -220,7 +433,7 @@ export class TurnoService {
     }
     console.log(`[DEBUG] Turno ${id_turno} tiene ${turno.empleados?.length || 0} empleados asignados.`);
 
-    // --- LOGICA DE AUDITORIA ---
+    // --- LOGICA DE AUDITORIA (Interna Turnos) ---
     // 1. Obtener detalles antiguos
     const detallesAntiguos = await this.detalleTurnoRepository.find({
       where: { turno: { turno_id: id_turno } },
@@ -306,9 +519,49 @@ export class TurnoService {
 
     if (logsAuditoria.length > 0) {
       await this.auditoriaTurnoRepository.save(logsAuditoria);
-      console.log(`[DEBUG] Se guardaron ${logsAuditoria.length} registros de auditoría.`);
+      console.log(`[DEBUG] Se guardaron ${logsAuditoria.length} registros de auditoría interna.`);
     }
-    // --- FIN LOGICA DE AUDITORIA ---
+    // --- FIN LOGICA DE AUDITORIA (Interna Turnos) ---
+
+    // --- AUDITORÍA GLOBAL (RegistroEvento) ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.turnoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.turnoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent);
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+        const accion = id_dia.length === 0 ? 'ha quitado todos los horarios' : 'ha asignado/actualizado horarios';
+
+        const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ${accion} para el turno "${turno.nombre}" perteneciente a la empresa "${turno.empresa?.nombre_empresa || 'Desconocida'}"`,
+          tipo_evento: 'Asignación Horarios Turno',
+          ip: ip,
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.turnoRepository.manager.save(registroEvento);
+      }
+    }
+    // ----------------------------------------
 
     await this.detalleTurnoRepository.delete({ turno: { turno_id: id_turno } });
 

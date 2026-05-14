@@ -10,6 +10,9 @@ import { Vacaciones } from 'src/vacaciones/entities/vacaciones.entity';
 import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
 import { DetalleAsistenciaService } from '../detalle-asistencia/detalle-asistencia.service';
 import { AuditoriaTurno } from '../detalle-turno/entities/auditoria-turno.entity';
+import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class ReportesService {
@@ -28,7 +31,8 @@ export class ReportesService {
     private readonly detalleAsistenciaService: DetalleAsistenciaService,
   ) { }
 
-  async generateAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+  //crear pdf para jornada diaria 
+  async generateAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
     const contentArr: any[] = [
       { text: `REPORTE DE JORNADA DIARIA\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
@@ -280,10 +284,52 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Jornada Diaria para las fichas: ${numFichaStr} en el periodo ${fechaInicio} al ${fechaFin}`,
+          tipo_evento: 'Reporte Asistencia Jornada Diaria',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generateSimpleAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+  //crear pdf para asistencia
+  async generateSimpleAttendancePdf(numFichaStr: string, fechaInicio: string, fechaFin: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
     const contentArr: any[] = [
       { text: `REPORTE DE ASISTENCIA\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
@@ -396,10 +442,51 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Asistencia Simple para las fichas: ${numFichaStr} en el periodo ${fechaInicio} al ${fechaFin}`,
+          tipo_evento: 'Reporte Asistencia Simple',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generarReporteVacaciones(numFicha: string): Promise<Buffer> {
+  async generarReporteVacaciones(numFicha: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const busquedaEmpleado = await this.empleadoRepository.findOne({
       where: {
         num_ficha: numFicha
@@ -590,10 +677,58 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Historial de Vacaciones para el empleado con ficha: ${numFicha}`,
+          tipo_evento: 'Reporte Vacaciones',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generarReporteAusencias(numFicha: string, fechaInicioStr?: string, fechaFinStr?: string): Promise<Buffer> {
+  async generarReporteAusencias(
+    numFicha: string, 
+    fechaInicioStr?: string, 
+    fechaFinStr?: string,
+    idUsuario?: number,
+    ip?: string,
+    userAgent?: string
+  ): Promise<Buffer> {
     const busquedaEmpleado = await this.empleadoRepository.findOne({
       where: {
         num_ficha: numFicha
@@ -725,10 +860,52 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+        const fechaAuditoria = fechaInicioStr && fechaFinStr ? `(${fechaInicioStr} al ${fechaFinStr})` : '(Histórico completo)';
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado un reporte de ausencias ${fechaAuditoria} para el empleado "${busquedaEmpleado.nombres} ${busquedaEmpleado.apellido_paterno}" perteneciente a la empresa "${busquedaEmpleado.empresa?.nombre_empresa || 'Desconocida'}"`,
+          tipo_evento: 'Descarga Reporte Ausencias',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generateDomFestPdf(numFichaStr: string, fechaInicio: string, fechaFin: string): Promise<Buffer> {
+  async generateDomFestPdf(numFichaStr: string, fechaInicio: string, fechaFin: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
     const contentArr: any[] = [
       { text: `REPORTE DOMINGOS Y FESTIVOS\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 0] }
@@ -941,10 +1118,51 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Domingos y Festivos para las fichas: ${numFichaStr} en el periodo ${fechaInicio} al ${fechaFin}`,
+          tipo_evento: 'Reporte Domingos y Festivos',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generateAuditTurnoPdf(fechaInicio: string, fechaFin: string, numFichaStr: string): Promise<Buffer> {
+  async generateAuditTurnoPdf(fechaInicio: string, fechaFin: string, numFichaStr: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const numFichas = numFichaStr.split(',').map(f => f.trim()).filter(f => f.length > 0);
     const contentArr: any[] = [
       { text: `REPORTE DE MODIFICACIONES Y/O ALTERACIONES DE TURNOS\n\nPeriodo: ${fechaInicio} hasta ${fechaFin}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 10] }
@@ -1069,10 +1287,51 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Auditoría de Turnos para las fichas: ${numFichaStr} en el periodo ${fechaInicio} al ${fechaFin}`,
+          tipo_evento: 'Reporte Auditoría Turnos',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 
-  async generateDailyMarkingsPdf(fecha: string): Promise<Buffer> {
+  async generateDailyMarkingsPdf(fecha: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const marcas = await this.marcasService.findAll('', fecha, fecha);
     
     // Agrupar por empleado
@@ -1157,6 +1416,47 @@ export class ReportesService {
 
     pdfmake.setFonts(fonts);
     const pdfDoc = pdfmake.createPdf(docDefinition);
-    return await pdfDoc.getBuffer();
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte de Marcaciones Diarias para la fecha ${fecha}`,
+          tipo_evento: 'Reporte Marcaciones Diarias',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return buffer;
   }
 }

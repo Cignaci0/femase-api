@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Ip, Headers } from '@nestjs/common';
 import { TipoDispositivoService } from './tipo-dispositivo.service';
 import { UpdateTipoDispositivoDto } from './dto/update-tipo-dispositivo.dto';
 import { TipoDispositivo } from './entities/tipo-dispositivo.entity';
@@ -10,9 +10,14 @@ export class TipoDispositivoController {
   constructor(private readonly tipoDispositivoService: TipoDispositivoService) {}
 
   @Post('crear')
-  create(@Body() createTipoDispositivoDto: TipoDispositivo, @Req() req) {
-    const usuario = req.user.username;
-    return this.tipoDispositivoService.create(createTipoDispositivoDto, usuario);
+  create(
+    @Body() createTipoDispositivoDto: TipoDispositivo, 
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.tipoDispositivoService.create(createTipoDispositivoDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -21,7 +26,14 @@ export class TipoDispositivoController {
   }
 
   @Patch('actualizar/:id')
-  update(@Param('id') id: string, @Body() updateTipoDispositivoDto: UpdateTipoDispositivoDto) {
-    return this.tipoDispositivoService.update(+id, updateTipoDispositivoDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateTipoDispositivoDto: UpdateTipoDispositivoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.tipoDispositivoService.update(+id, updateTipoDispositivoDto, idUsuario, ip, userAgent);
   }
 }

@@ -7,6 +7,8 @@ import { Between, Repository } from 'typeorm';
 import { Empleado } from '../empleado/entities/empleado.entity';
 import { User } from '../users/user.entity';
 import { MailerService } from '@nestjs-modules/mailer';
+import { RegistroEvento } from '../registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class VacacionesService {
@@ -20,11 +22,17 @@ export class VacacionesService {
     private readonly mailerService: MailerService,
   ) { }
 
+  private formatDate(date: Date): string {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    return d.toISOString().split('T')[0];
+  }
+
   create(createVacacioneDto: CreateVacacioneDto) {
     return 'This action adds a new vacacione';
   }
 
-  async aprobarRechazarSolicitud(idSolicitud: number, estado: string, usuario: string) {
+  async aprobarRechazarSolicitud(idSolicitud: number, estado: string, usuario: string, idUsuario?: number, ip?: string, userAgent?: string) {
     const busquedaSolicitud = await this.vacacionesRepository.findOne({
       where: {
         id_vacaciones: idSolicitud
@@ -77,7 +85,49 @@ export class VacacionesService {
       ? diasDisponibles - busquedaSolicitud.dias_efectivos
       : diasDisponibles;
 
-    return this.vacacionesRepository.save(busquedaSolicitud);
+    const guardar = await this.vacacionesRepository.save(busquedaSolicitud);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.vacacionesRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.vacacionesRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+        const accionTxt = estado === 'A' ? 'APROBADO' : 'RECHAZADO';
+
+        const registroEvento = this.vacacionesRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha ${accionTxt} la solicitud de vacaciones del empleado "${busquedaSolicitud.empleado.nombres} ${busquedaSolicitud.empleado.apellido_paterno}" (Ficha: ${busquedaSolicitud.empleado.num_ficha}) desde el dia ${this.formatDate(busquedaSolicitud.fecha_inicio)} hasta el dia ${this.formatDate(busquedaSolicitud.fecha_fin)}.`,
+          tipo_evento: `Resolución Vacaciones (${accionTxt})`,
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.vacacionesRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardar;
   }
 
   async getDiasDisponibles(numFicha: string) {
@@ -164,7 +214,7 @@ export class VacacionesService {
     };
   }
 
-  async createSolicitudVacaciones(createVacacioneDto: CreateVacacioneDto, numFicha: string, autorizador: string) {
+  async createSolicitudVacaciones(createVacacioneDto: CreateVacacioneDto, numFicha: string, autorizador: string, idUsuario?: number, ip?: string, userAgent?: string) {
     const { fechaInicio, fechaFin, estadoId } = createVacacioneDto;
 
     const empleado = await this.empleadoRepository.findOne({
@@ -290,7 +340,48 @@ export class VacacionesService {
           </div>`,
     });
 
-    return this.vacacionesRepository.save(vacaciones);
+    const guardar = await this.vacacionesRepository.save(vacaciones);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.vacacionesRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.vacacionesRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.vacacionesRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado una solicitud de vacaciones para el empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) desde el ${this.formatDate(new Date(fechaInicio))} al ${this.formatDate(new Date(fechaFin))}.`,
+          tipo_evento: 'Solicitud Vacaciones',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.vacacionesRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardar;
   }
 
   async findAll(numFicha: string, fechaInicio?: Date, fechaFin?: Date) {
