@@ -84,4 +84,9 @@ export class UsersController {
   async obtenerAdminPorEmpresa(@Param('idEmpresa') idEmpresa: string) {
     return await this.userService.obtenerAdminPorEmpresa(+idEmpresa);
   }
+
+  @Get('obtener-usuarios/:idEmpresa')
+  async obtenerUsuariosPorEmpresa(@Param('idEmpresa') idEmpresa: string) {
+    return await this.userService.obtenerUserporEmpresa(+idEmpresa);
+  }
 }

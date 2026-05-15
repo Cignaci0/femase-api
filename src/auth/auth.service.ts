@@ -70,9 +70,11 @@ export class AuthService {
       correo: user.empleado?.email_laboral || user.email,
       rut: user.empleado?.run || user.run_usuario,
       ip: ip,
-      empresa: user.empleado?.empresa?.empresa_id || user.empresa?.empresa_id
+      empresa: user.empleado?.empresa?.empresa_id || user.empresa?.empresa_id,
+      idusuario: user.usuario_id,
+      username: user.username
     });
-    
+
 
     return {
       token: await this.jwtService.signAsync(payload),

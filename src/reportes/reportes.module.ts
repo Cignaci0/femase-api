@@ -11,9 +11,12 @@ import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
 import { DetalleAsistenciaModule } from '../detalle-asistencia/detalle-asistencia.module';
 import { DetalleAsistencia } from '../detalle-asistencia/entities/detalle-asistencia.entity';
 import { AuditoriaTurno } from '../detalle-turno/entities/auditoria-turno.entity';
+import { RegistroConexione } from '../registro_conexiones/entities/registro_conexione.entity';
+import { Empresa } from '../empresas/empresas.entity';
+import { User } from '../users/user.entity';
 
 @Module({
-  imports: [MarcasModule, EmpleadoModule, DetalleAsistenciaModule, TypeOrmModule.forFeature([Empleado, Feriado, Vacaciones, Ausencia, DetalleAsistencia, AuditoriaTurno])],
+  imports: [MarcasModule, EmpleadoModule, DetalleAsistenciaModule, TypeOrmModule.forFeature([Empleado, Feriado, Vacaciones, Ausencia, DetalleAsistencia, AuditoriaTurno, RegistroConexione, Empresa, User])],
   controllers: [ReportesController],
   providers: [ReportesService],
 })

@@ -516,4 +516,15 @@ export class UsersService {
       relations: ['empresa', 'perfil']
     })
   }
+
+  async obtenerUserporEmpresa(idEmpresa:number){
+    return this.usersRepository.find({
+      where: {
+        empresa: {
+          empresa_id: idEmpresa
+        }
+      },
+      relations: ['empresa']
+    })
+  }
 }

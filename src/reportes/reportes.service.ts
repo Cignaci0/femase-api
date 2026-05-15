@@ -12,6 +12,8 @@ import { DetalleAsistenciaService } from '../detalle-asistencia/detalle-asistenc
 import { AuditoriaTurno } from '../detalle-turno/entities/auditoria-turno.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { RegistroConexione } from 'src/registro_conexiones/entities/registro_conexione.entity';
+import { Empresa } from 'src/empresas/empresas.entity';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -28,6 +30,12 @@ export class ReportesService {
     private readonly ausenciaRepository: Repository<Ausencia>,
     @InjectRepository(AuditoriaTurno)
     private readonly auditoriaTurnoRepository: Repository<AuditoriaTurno>,
+    @InjectRepository(RegistroConexione)
+    private readonly registroConexioneRepository: Repository<RegistroConexione>,
+    @InjectRepository(Empresa)
+    private readonly empresaRepository: Repository<Empresa>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly detalleAsistenciaService: DetalleAsistenciaService,
   ) { }
 
@@ -1449,13 +1457,151 @@ export class ReportesService {
           empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
           depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
           cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+
+    return buffer;
+  }
+
+  async reporteConexiones(fechaInicio: string, fechaFin: string, idEmpresa?: number, idUsuarioFiltro?: number, idUsuarioAuditoria?: number, ip?: string, userAgent?: string): Promise<Buffer> {
+    const empresas = await this.empresaRepository.find();
+    const empresaMap = new Map(empresas.map(e => [e.empresa_id, e.nombre_empresa]));
+    let usuarioFiltro: User | null = null;
+    if (idUsuarioFiltro) {
+      usuarioFiltro = await this.userRepository.findOne({ where: { usuario_id: idUsuarioFiltro } });
+    }
+
+    const where: any = {
+      fecha: Between(
+        new Date(`${fechaInicio}T00:00:00`),
+        new Date(`${fechaFin}T23:59:59`)
+      )
+    };
+
+    if (idEmpresa) {
+      where.empresa = { empresa_id: idEmpresa };
+    }
+    if (idUsuarioFiltro) {
+      where.idusuario = { usuario_id: idUsuarioFiltro };
+    }
+
+    const conexiones = await this.registroConexioneRepository.find({
+      where,
+      relations: ['empresa', 'idusuario'],
+      order: { fecha: 'DESC', hora: 'DESC' }
+    });
+
+    let tituloReporte = 'REPORTE GENERAL DE REGISTRO DE CONEXIONES';
+    if (idEmpresa && !idUsuarioFiltro) {
+      tituloReporte = `REPORTE DE REGISTRO DE CONEXIONES\nEMPRESA: ${empresaMap.get(Number(idEmpresa)) || 'Desconocida'}`;
+    } else if (idUsuarioFiltro) {
+      tituloReporte = `REPORTE DE REGISTRO DE CONEXIONES\nUSUARIO: ${usuarioFiltro?.username || 'Desconocido'}`;
+      if (idEmpresa) tituloReporte += `\nEMPRESA: ${empresaMap.get(Number(idEmpresa)) || ''}`;
+    }
+
+    const fInicioFormateada = fechaInicio.split('-').reverse().join('-');
+    const fFinFormateada = fechaFin.split('-').reverse().join('-');
+
+    const contentArr: any[] = [
+      { text: `${tituloReporte}\n\nPeriodo: ${fInicioFormateada} hasta ${fFinFormateada}`, style: 'subheader', alignment: 'center', margin: [0, 10, 0, 10] }
+    ];
+
+    const body: any[][] = [
+      [
+        { text: 'Fecha', style: 'tableHeader' },
+        { text: 'Hora', style: 'tableHeader' },
+        { text: 'Usuario', style: 'tableHeader' },
+        { text: 'Correo', style: 'tableHeader' },
+        { text: 'RUT', style: 'tableHeader' },
+        { text: 'IP', style: 'tableHeader' },
+        { text: 'Empresa', style: 'tableHeader' }
+      ]
+    ];
+
+    conexiones.forEach(con => {
+      body.push([
+        new Date(con.fecha).toLocaleDateString('es-CL'),
+        con.hora,
+        con.username || '---',
+        con.correo,
+        con.rut,
+        con.ip,
+        con.empresa?.nombre_empresa || 'Desconocida'
+      ]);
+    });
+
+    contentArr.push({
+      table: {
+        headerRows: 1,
+        widths: ['auto', 'auto', 'auto', '*', 'auto', 'auto', 'auto'],
+        body: body
+      },
+      layout: 'lightHorizontalLines'
+    });
+
+    const docDefinition = {
+      content: contentArr,
+      styles: {
+        header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] },
+        subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },
+        tableHeader: { bold: true, fontSize: 12, color: 'black' }
+      },
+      defaultStyle: { font: 'Arial', fontSize: 10 }
+    };
+
+    const fonts = {
+      Arial: {
+        normal: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italics: 'Helvetica-Oblique',
+        bolditalics: 'Helvetica-BoldOblique'
+      }
+    };
+
+    pdfmake.setFonts(fonts);
+    const pdfDoc = pdfmake.createPdf(docDefinition);
+    const buffer = await pdfDoc.getBuffer();
+
+    // --- AUDITORÍA ---
+    if (idUsuarioAuditoria) {
+      const autor = await this.userRepository.findOne({
+        where: { usuario_id: idUsuarioAuditoria },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha generado el reporte General de Registro de Conexiones desde ${fechaInicio} hasta ${fechaFin}`,
+          tipo_evento: 'Reporte Registro Conexiones',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
           rut: autor?.run_usuario
         });
 
         await this.empleadoRepository.manager.save(registroEvento);
       }
     }
-    // -----------------
 
     return buffer;
   }

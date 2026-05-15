@@ -199,4 +199,41 @@ export class ReportesController {
       throw new HttpException('Error generando reporte: ' + error.message, 500);
     }
   }
+
+  @Get('conexiones/pdf')
+  async generateConexionesReport(
+    @Res() res: Response,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+    @Query('idEmpresa') idEmpresa?: number,
+    @Query('idUsuario') idUsuarioFiltro?: number
+  ) {
+    if (!fechaInicio || !fechaFin) {
+      throw new HttpException('Faltan parámetros requeridos: fechaInicio, fechaFin', 400);
+    }
+
+    try {
+      const idUsuarioAuditoria = req.user?.sub;
+      const pdfBuffer = await this.reportesService.reporteConexiones(
+        fechaInicio, 
+        fechaFin, 
+        idEmpresa ? Number(idEmpresa) : undefined, 
+        idUsuarioFiltro ? Number(idUsuarioFiltro) : undefined,
+        idUsuarioAuditoria, 
+        ip, 
+        userAgent
+      );
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="registro_conexiones_${fechaInicio}_${fechaFin}.pdf"`,
+        'Content-Length': pdfBuffer.length,
+      });
+      res.end(pdfBuffer);
+    } catch (error) {
+      throw new HttpException('Error generando reporte: ' + error.message, 500);
+    }
+  }
 }

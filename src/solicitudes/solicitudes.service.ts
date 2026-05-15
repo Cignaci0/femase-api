@@ -207,64 +207,72 @@ export class SolicitudesService {
       },
     });
     if (updateSolicitudeDto.estado === "R") {
-      await this.mailService.sendMail({
-        to: empleado?.email_laboral,
-        subject: 'Solicitud rechazada',
-        html: `
-        <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
-          <div style="background-color: #0088cc; padding: 20px; color: white; text-align: center;">
-            <h2 style="margin: 0; font-size: 20px;">Resolución de Solicitud</h2>
-          </div>
-          <div style="padding: 30px; text-align: center;">
-            <h3 style="color: #0088cc; margin-top: 0;">Estimado(a):</h3>
-            <p style="font-size: 16px; margin-bottom: 20px;">
-              <strong>${solicitud?.empleado?.nombres || ''} ${solicitud?.empleado?.apellido_paterno || ''} ${solicitud?.empleado?.apellido_materno || ''}</strong>, con fecha ${fechaFormateada} se ha <strong>rechazado</strong> su solicitud según el siguiente detalle:
-            </p>
-            <div style="text-align: center; margin: 0 auto; line-height: 1.6;">
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Tipo:</strong> <span style="color: #601445;">${solicitud?.tipo}</span></p>
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Hora de Resolución:</strong> <span style="color: #601445;">${horaAprobacion}</span></p>
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Descripción:</strong> <span style="color: #601445;">${solicitud?.texto}</span></p>
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Motivo Resolución:</strong> <span style="color: #601445;">${updateSolicitudeDto.motivo}</span></p>
+      try {
+        await this.mailService.sendMail({
+          to: empleado?.email_laboral,
+          subject: 'Solicitud rechazada',
+          html: `
+          <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #0088cc; padding: 20px; color: white; text-align: center;">
+              <h2 style="margin: 0; font-size: 20px;">Resolución de Solicitud</h2>
             </div>
-            <div style="margin-top: 30px;">
-              <p style="font-size: 14px; color: #0088cc; font-weight: bold; margin-bottom: 5px;">Para apelar a esta resolución solicitamos escribir a <a href="mailto:${usuario?.email}" style="color: #0088cc;">${usuario?.email}</a></p>
-              <p style="font-size: 14px; color: #0088cc; font-weight: bold; margin-top: 0;">en un plazo máximo de 48 horas.</p>
+            <div style="padding: 30px; text-align: center;">
+              <h3 style="color: #0088cc; margin-top: 0;">Estimado(a):</h3>
+              <p style="font-size: 16px; margin-bottom: 20px;">
+                <strong>${solicitud?.empleado?.nombres || ''} ${solicitud?.empleado?.apellido_paterno || ''} ${solicitud?.empleado?.apellido_materno || ''}</strong>, con fecha ${fechaFormateada} se ha <strong>rechazado</strong> su solicitud según el siguiente detalle:
+              </p>
+              <div style="text-align: center; margin: 0 auto; line-height: 1.6;">
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Tipo:</strong> <span style="color: #601445;">${solicitud?.tipo}</span></p>
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Hora de Resolución:</strong> <span style="color: #601445;">${horaAprobacion}</span></p>
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Descripción:</strong> <span style="color: #601445;">${solicitud?.texto}</span></p>
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Motivo Resolución:</strong> <span style="color: #601445;">${updateSolicitudeDto.motivo}</span></p>
+              </div>
+              <div style="margin-top: 30px;">
+                <p style="font-size: 14px; color: #0088cc; font-weight: bold; margin-bottom: 5px;">Para apelar a esta resolución solicitamos escribir a <a href="mailto:${usuario?.email}" style="color: #0088cc;">${usuario?.email}</a></p>
+                <p style="font-size: 14px; color: #0088cc; font-weight: bold; margin-top: 0;">en un plazo máximo de 48 horas.</p>
+              </div>
+              <div style="margin-top: 30px;">
+                <p style="font-size: 14px; color: #0088cc;">Puede revisar sus solicitudes en el sistema:</p>
+                <p><a href="http://localhost:5173/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
+              </div>
+              <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
             </div>
-            <div style="margin-top: 30px;">
-              <p style="font-size: 14px; color: #0088cc;">Puede revisar sus solicitudes en el sistema:</p>
-              <p><a href="http://localhost:5173/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
-            </div>
-            <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
-          </div>
-        </div>`,
-      })
+          </div>`,
+        })
+      } catch (error) {
+        console.error('Error enviando correo de rechazo:', error);
+      }
     } else if (updateSolicitudeDto.estado === "A") {
-      await this.mailService.sendMail({
-        to: empleado?.email_laboral,
-        subject: 'Solicitud aprobada',
-        html: `
-        <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
-          <div style="background-color: #0088cc; padding: 20px; color: white; text-align: center;">
-            <h2 style="margin: 0; font-size: 20px;">Resolución de Solicitud</h2>
-          </div>
-          <div style="padding: 30px; text-align: center;">
-            <h3 style="color: #0088cc; margin-top: 0;">Estimado(a):</h3>
-            <p style="font-size: 16px; margin-bottom: 20px;">
-              <strong>${solicitud?.empleado?.nombres || ''} ${solicitud?.empleado?.apellido_paterno || ''} ${solicitud?.empleado?.apellido_materno || ''}</strong>, con fecha ${fechaFormateada} se ha <strong>aprobado</strong> su solicitud según el siguiente detalle:
-            </p>
-            <div style="text-align: center; margin: 0 auto; line-height: 1.6;">
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Tipo:</strong> <span style="color: #601445;">${solicitud?.tipo}</span></p>
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Hora de Resolución:</strong> <span style="color: #601445;">${horaAprobacion}</span></p>
-              <p style="margin: 5px 0;"><strong style="color: #601445;">Descripción:</strong> <span style="color: #601445;">${solicitud?.texto}</span></p>
+      try {
+        await this.mailService.sendMail({
+          to: empleado?.email_laboral,
+          subject: 'Solicitud aprobada',
+          html: `
+          <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #0088cc; padding: 20px; color: white; text-align: center;">
+              <h2 style="margin: 0; font-size: 20px;">Resolución de Solicitud</h2>
             </div>
-            <div style="margin-top: 30px;">
-              <p style="font-size: 14px; color: #0088cc;">Puede revisar sus solicitudes en el sistema:</p>
-              <p><a href="http://localhost:5173/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
+            <div style="padding: 30px; text-align: center;">
+              <h3 style="color: #0088cc; margin-top: 0;">Estimado(a):</h3>
+              <p style="font-size: 16px; margin-bottom: 20px;">
+                <strong>${solicitud?.empleado?.nombres || ''} ${solicitud?.empleado?.apellido_paterno || ''} ${solicitud?.empleado?.apellido_materno || ''}</strong>, con fecha ${fechaFormateada} se ha <strong>aprobado</strong> su solicitud según el siguiente detalle:
+              </p>
+              <div style="text-align: center; margin: 0 auto; line-height: 1.6;">
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Tipo:</strong> <span style="color: #601445;">${solicitud?.tipo}</span></p>
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Hora de Resolución:</strong> <span style="color: #601445;">${horaAprobacion}</span></p>
+                <p style="margin: 5px 0;"><strong style="color: #601445;">Descripción:</strong> <span style="color: #601445;">${solicitud?.texto}</span></p>
+              </div>
+              <div style="margin-top: 30px;">
+                <p style="font-size: 14px; color: #0088cc;">Puede revisar sus solicitudes en el sistema:</p>
+                <p><a href="http://localhost:5173/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
+              </div>
+              <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
             </div>
-            <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
-          </div>
-        </div>`,
-      })
+          </div>`,
+        })
+      } catch (error) {
+        console.error('Error enviando correo de aprobación:', error);
+      }
     }
 
     Object.assign(solicitud, updateSolicitudeDto);
