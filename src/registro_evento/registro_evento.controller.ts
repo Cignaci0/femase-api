@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { RegistroEventoService } from './registro_evento.service';
 import { CreateRegistroEventoDto } from './dto/create-registro_evento.dto';
 import { UpdateRegistroEventoDto } from './dto/update-registro_evento.dto';
@@ -13,8 +13,11 @@ export class RegistroEventoController {
   }
 
   @Get()
-  findAll() {
-    return this.registroEventoService.findAll();
+  findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+  ) {
+    return this.registroEventoService.findAll(Number(page), Number(limit));
   }
 
   @Get(':id')

@@ -14,12 +14,21 @@ export class RegistroEventoService {
     return ""
   }
 
-  async findAll() {
-    return await this.registroEventosRepository.find({
-      order: {
-        id: 'desc'
-      }
-    })
+  async findAll(page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.registroEventosRepository.findAndCount({
+      order: { id: 'DESC' },
+      take: limit,
+      skip: skip,
+    });
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   findOne(id: number) {
