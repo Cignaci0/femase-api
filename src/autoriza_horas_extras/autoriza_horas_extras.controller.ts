@@ -13,7 +13,7 @@ export class AutorizaHorasExtrasController {
 
   @Post()
   create(@Body() createAutorizaHorasExtraDto: CreateAutorizaHorasExtraDto) {
-    return this.autorizaHorasExtrasService.create(createAutorizaHorasExtraDto);
+    return this.autorizaHorasExtrasService.create(createAutorizaHorasExtraDto.numFicha);
   }
 
   @Get()
