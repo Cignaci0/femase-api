@@ -52,6 +52,12 @@ import { MarcasModule } from './marcas/marcas.module';
 import { Marca } from './marcas/entities/marca.entity';
 import { MarcasAuditoriaModule } from './marcas-auditoria/marcas-auditoria.module';
 import { MarcasAuditoria } from './marcas-auditoria/entities/marcas-auditoria.entity';
+import { Empleado } from './empleado/entities/empleado.entity';
+import { EmpleadoModule } from './empleado/empleado.module';
+import { Documento } from './documento/entities/documento.entity';
+import { Firma } from './firmas/entities/firma.entity';
+import { Solicitude } from './solicitudes/entities/solicitude.entity';
+import { RegistroConexione } from './registro_conexiones/entities/registro_conexione.entity';
 
 import { ReportesModule } from './reportes/reportes.module';
 import { VacacionesModule } from './vacaciones/vacaciones.module';

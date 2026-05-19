@@ -62,7 +62,7 @@ export class DetalleAsistenciaService {
           colacionTeorica: horario?.colacion || '-',
           inicioColacionTeorica: horario?.hora_inicio_colacion || '-',
           finColacionTeorica: horario?.hora_fin_colacion || '-',
-          horasTeoricas: '00:00',
+          horasTeoricas: '00:00:00',
           horasPresenciales: '-',
           atraso: '-',
           horasJustificadas: '-',
@@ -70,6 +70,7 @@ export class DetalleAsistenciaService {
           horasNoTrabajadas: '-',
           totalDia: '-',
           observacion: m.info_adicional || '',
+          holguraMs: parseMs(horario?.holgura_mins),
         });
       }
 
@@ -85,14 +86,15 @@ export class DetalleAsistenciaService {
       }
     }
 
-    const formatMs = (ms: number): string => {
-      if (ms <= 0) return '00:00';
+    function formatMs(ms: number): string {
+      if (ms <= 0) return '00:00:00';
       const hrs = Math.floor(ms / 3600000);
       const mins = Math.floor((ms % 3600000) / 60000);
-      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-    };
+      const secs = Math.floor((ms % 60000) / 1000);
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
 
-    const parseMs = (timeStr: any): number => {
+    function parseMs(timeStr: any): number {
       if (!timeStr || timeStr === '-' || timeStr === '00:00' || timeStr === '00:00:00') return 0;
       if (typeof timeStr === 'number') return timeStr * 60000;
       if (typeof timeStr !== 'string') {
@@ -104,7 +106,7 @@ export class DetalleAsistenciaService {
       const p = timeStr.split(':');
       if (p.length < 2) return 0;
       return (parseInt(p[0]) * 3600000) + (parseInt(p[1]) * 60000) + (p.length >= 3 ? parseInt(p[2]) * 1000 : 0);
-    };
+    }
 
     const diffMsStr = (t1: string, t2: string): number => {
       if (t1 === '-' || t2 === '-') return 0;
@@ -164,14 +166,53 @@ export class DetalleAsistenciaService {
         reg.totalDia = formatMs(totalDiaMs);
       }
 
+      const parts = reg.fecha.split(' ')[1].split('-');
+      const formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+
+      const isFeriado = feriados.some(fer => {
+        let fStr = '';
+        if (fer.fecha instanceof Date) fStr = fer.fecha.toISOString().substring(0, 10);
+        else if (typeof fer.fecha === 'string') fStr = fer.fecha.substring(0, 10);
+        return fStr === formattedDate;
+      });
+
+      // 1. Atraso Entrada
       let atrasoMs = 0;
       if (entReal !== '-' && entTeo !== '-') {
         const diff = new Date(`1970-01-01T${entReal}`).getTime() - new Date(`1970-01-01T${entTeo}`).getTime();
-        if (diff > 0) {
+        const holguraMs = reg.holguraMs || 0;
+        if (diff > holguraMs) {
           atrasoMs = diff;
           reg.atraso = formatMs(atrasoMs);
         } else {
-          reg.atraso = '00:00';
+          reg.atraso = '00:00:00';
+        }
+      }
+
+      // 2. Salida Temprana
+      let salidaTempranaMs = 0;
+      if (salReal !== '-' && salTeo !== '-') {
+        const diff = new Date(`1970-01-01T${salTeo}`).getTime() - new Date(`1970-01-01T${salReal}`).getTime();
+        if (diff > 0) {
+          salidaTempranaMs = diff;
+        }
+      }
+
+      // 3. Entrada Anticipada
+      let entradaAnticipadaMs = 0;
+      if (entReal !== '-' && entTeo !== '-') {
+        const diff = new Date(`1970-01-01T${entTeo}`).getTime() - new Date(`1970-01-01T${entReal}`).getTime();
+        if (diff > 0) {
+          entradaAnticipadaMs = diff;
+        }
+      }
+
+      // 4. Salida Tardía
+      let salidaTardiaMs = 0;
+      if (salReal !== '-' && salTeo !== '-') {
+        const diff = new Date(`1970-01-01T${salReal}`).getTime() - new Date(`1970-01-01T${salTeo}`).getTime();
+        if (diff > 0) {
+          salidaTardiaMs = diff;
         }
       }
 
@@ -180,29 +221,18 @@ export class DetalleAsistenciaService {
         hrsTeoricasTrabajoMs = hrsTeoricasMs - colacionMs;
       }
 
+      // Cálculo final de Tiempo Faltante (No se descuenta en feriados)
       let noTrabajadasMs = 0;
       if (hrsTeoricasTrabajoMs > 0 && totalDiaMs === 0) {
-        noTrabajadasMs = hrsTeoricasTrabajoMs;
-        reg.horasNoTrabajadas = formatMs(noTrabajadasMs);
-      } else if (hrsTeoricasTrabajoMs > 0 && totalDiaMs > 0) {
-        if (hrsTeoricasTrabajoMs > totalDiaMs) {
-          noTrabajadasMs = hrsTeoricasTrabajoMs - totalDiaMs;
-          reg.horasNoTrabajadas = formatMs(noTrabajadasMs);
-        } else {
-          reg.horasNoTrabajadas = '00:00';
-        }
-      }
-
-      let horasExtraMs = 0;
-      if (totalDiaMs > hrsTeoricasTrabajoMs) {
-        horasExtraMs = totalDiaMs - hrsTeoricasTrabajoMs;
-        reg.horasExtra = formatMs(horasExtraMs);
+        noTrabajadasMs = isFeriado ? 0 : hrsTeoricasTrabajoMs;
       } else {
-        reg.horasExtra = '00:00';
+        noTrabajadasMs = isFeriado ? 0 : (atrasoMs + salidaTempranaMs);
       }
+      reg.horasNoTrabajadas = formatMs(noTrabajadasMs);
 
-      const parts = reg.fecha.split(' ')[1].split('-');
-      const formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      // Cálculo final de Tiempo Extra
+      let horasExtraMs = entradaAnticipadaMs + salidaTardiaMs;
+      reg.horasExtra = formatMs(horasExtraMs);
 
       let justifMs = 0;
       const ausenciaList = ausencias.filter(aus => {
@@ -234,13 +264,7 @@ export class DetalleAsistenciaService {
         noTrabajadasMs -= justifMs;
         reg.horasNoTrabajadas = formatMs(noTrabajadasMs);
       }
-      const isFeriado = feriados.some(fer => {
-        let fStr = '';
-        if (fer.fecha instanceof Date) fStr = fer.fecha.toISOString().substring(0, 10);
-        else if (typeof fer.fecha === 'string') fStr = fer.fecha.substring(0, 10);
-        return fStr === formattedDate;
-      });
-
+      
       if (isFeriado) {
         if (entReal === '-' && salReal === '-') {
           reg.observacion = 'Feriado';

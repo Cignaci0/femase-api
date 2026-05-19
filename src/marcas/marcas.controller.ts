@@ -63,8 +63,8 @@ export class MarcasController {
   @Patch(':id')
   @UseGuards(AuthGuard)
   update(
-    @Param('id') id: string, 
-    @Body() updateMarcaDto: UpdateMarcaDto, 
+    @Param('id') id: string,
+    @Body() updateMarcaDto: UpdateMarcaDto,
     @Req() req: any,
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string

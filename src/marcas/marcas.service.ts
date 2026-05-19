@@ -66,40 +66,52 @@ export class MarcasService {
         where: { num_ficha: nuevaMarca.num_ficha }, relations: ['cenco', 'empresa']
       });
 
-      if (empleadoInfo && empleadoInfo.email) {
-        const correoEmpleado = empleadoInfo.email;  // CAMBIAR A CORREO LABORAL SIESQUE ES NECESARIO
-        const nombreEmpleado = empleadoInfo.nombres + ' ' + empleadoInfo.apellido_paterno + ' ' + empleadoInfo.apellido_materno;
-        const correoCenco = empleadoInfo.cenco.email_notificacion;
-
-        let eventoNombre = 'Marca';
-        if (nuevaMarca.evento === 1) eventoNombre = 'Entrada';
-        if (nuevaMarca.evento === 2) eventoNombre = 'Salida';
-
-        let fMarca = nuevaMarca.fecha_marca;
-        let fechaFormatString = '';
-        if (fMarca instanceof Date) {
-          const day = String(fMarca.getDate()).padStart(2, '0');
-          const month = String(fMarca.getMonth() + 1).padStart(2, '0');
-          const year = fMarca.getFullYear();
-          fechaFormatString = `${day}/${month}/${year}`;
-        } else if (typeof fMarca === 'string') {
-          const parts = (fMarca as string).substring(0, 10).split('-');
-          if (parts.length === 3) {
-            fechaFormatString = `${parts[2]}/${parts[1]}/${parts[0]}`;
-          } else {
-            fechaFormatString = fMarca;
-          }
+      if (empleadoInfo) {
+        // Re-implementing TurnoFlexible logic
+        if (empleadoInfo.tiene_turno_flexible) {
+          const flexibleMark = this.turnoFlexibleRepository.create({
+            fecha: nuevaMarca.fecha_marca,
+            hora_marca: nuevaMarca.hora_marca,
+            evento: nuevaMarca.evento,
+            num_ficha: empleadoInfo
+          });
+          await this.turnoFlexibleRepository.save(flexibleMark);
         }
-        const nombre_empresa = empleadoInfo?.empresa.nombre_empresa;
-        const rut_empresa = empleadoInfo?.empresa.rut_empresa;
-        const direccion = empleadoInfo?.empresa.direccion_empresa;
-        const comuna = empleadoInfo?.empresa.comuna_empresa;
 
-        await this.mailerService.sendMail({
-          to: correoEmpleado,
-          cc: empleadoInfo.email_noti,
-          subject: 'Nueva Marca Registrada',
-          html: `
+        if (empleadoInfo.email) {
+          const correoEmpleado = empleadoInfo.email;
+          const nombreEmpleado = empleadoInfo.nombres + ' ' + empleadoInfo.apellido_paterno + ' ' + empleadoInfo.apellido_materno;
+          const direccionMarca = empleadoInfo.cenco?.direccion || 'No especificada';
+
+          let eventoNombre = 'Marca';
+          if (nuevaMarca.evento === 1) eventoNombre = 'Entrada';
+          if (nuevaMarca.evento === 2) eventoNombre = 'Salida';
+
+          let fMarca = nuevaMarca.fecha_marca;
+          let fechaFormatString = '';
+          if (fMarca instanceof Date) {
+            const day = String(fMarca.getDate()).padStart(2, '0');
+            const month = String(fMarca.getMonth() + 1).padStart(2, '0');
+            const year = fMarca.getFullYear();
+            fechaFormatString = `${day}/${month}/${year}`;
+          } else if (typeof fMarca === 'string') {
+            const parts = (fMarca as string).substring(0, 10).split('-');
+            if (parts.length === 3) {
+              fechaFormatString = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            } else {
+              fechaFormatString = fMarca;
+            }
+          }
+          const nombre_empresa = empleadoInfo?.empresa.nombre_empresa;
+          const rut_empresa = empleadoInfo?.empresa.rut_empresa;
+          const direccion = empleadoInfo?.empresa.direccion_empresa;
+          const comuna = empleadoInfo?.empresa.comuna_empresa;
+
+          await this.mailerService.sendMail({
+            to: correoEmpleado,
+            cc: empleadoInfo.email_noti,
+            subject: 'Nueva Marca Registrada',
+            html: `
           <div style="font-family: Arial, sans-serif; color: #333;">
             <h2>Hola, ${nombreEmpleado}</h2>
             <p>Se ha creado una nueva marca en el sistema con los siguientes detalles:</p>
@@ -111,7 +123,7 @@ export class MarcasService {
               <li><strong>Nombre:</strong> ${nombreEmpleado}</li>
               <li><strong>Evento:</strong> ${eventoNombre}</li>
               <li><strong>Hashcode:</strong> ${nuevaMarca.hashcode}</li>
-              <li><strong>Dirección Marcación:</strong> ${empleadoInfo.cenco?.direccion || 'No especificada'}</li>
+              <li><strong>Dirección Marcación:</strong> ${direccionMarca}</li>
               
             </ul>
             <p>Sistema excepcional de jordana: No Aplica</p>
@@ -129,55 +141,12 @@ export class MarcasService {
             <p>Rut: NO APLICA</p>
             <p>Si no reconoces esta marca o tienes dudas, puedes contactar al administrador.</p>
           </div>`,
-        });
+          });
+        }
       }
     } catch (error) {
       console.error('Error al enviar correo de nueva marca:', error);
     }
-
-    // --- AUDITORÍA ---
-    if (idUsuario && !isNaN(idUsuario)) {
-      const autor = await this.marcaRepository.manager.findOne(User, {
-        where: { usuario_id: idUsuario },
-        relations: ['empleado', 'empresa']
-      });
-
-      if (autor) {
-        let empleadoAutor: Empleado | null = null;
-        if (autor?.empleado?.empleado_id) {
-          empleadoAutor = await this.marcaRepository.manager.findOne(Empleado, {
-            where: { empleado_id: autor.empleado.empleado_id },
-            relations: ['empresa', 'cenco', 'cenco.departamento']
-          });
-        }
-
-        const parser = new UAParser(userAgent || '');
-        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
-
-        const empleadoAfectado = await this.marcaRepository.manager.findOne(Empleado, {
-          where: { num_ficha: nuevaMarca.num_ficha },
-          relations: ['empresa']
-        });
-
-        const registroEvento = this.marcaRepository.manager.create(RegistroEvento, {
-          usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado una marca manual para el empleado "${empleadoAfectado?.nombres || ''} ${empleadoAfectado?.apellido_paterno || ''} ${empleadoAfectado?.apellido_materno || ''}" num ficha ficha: ${nuevaMarca.num_ficha}`,
-          tipo_evento: 'Creación Manual de Marca',
-          ip: ip || 'Desconocida',
-          fecha: new Date(),
-          hora: new Date().toTimeString().split(' ')[0],
-          sistema_operativo: parser.getOS().name || 'Desconocido',
-          browser: navegador,
-          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
-          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
-          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
-          rut: autor?.run_usuario
-        });
-
-        await this.marcaRepository.manager.save(registroEvento);
-      }
-    }
-    // -----------------
 
     return { message: 'Marca creada exitosamente', data: guardar };
   }

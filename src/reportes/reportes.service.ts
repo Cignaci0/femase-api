@@ -147,8 +147,8 @@ export class ReportesService {
         const reg: any = data.registros[i];
 
         semTeoricasMs += parseMs(reg.horasTeoricas);
-        semPresencialesMs += parseMs(reg.totalDia);
-        
+        semPresencialesMs += parseMs(reg.horasPresenciales);
+
         let rowColMs = parseMs(reg.colacionTeorica);
         const sCMs = parseMs(reg.inicioColacionTeorica);
         const eCMs = parseMs(reg.finColacionTeorica);
@@ -158,7 +158,7 @@ export class ReportesService {
           rowColMs = d;
         }
         semColacionMs += rowColMs;
-        
+
         semNoTrabajadasMs += parseMs(reg.horasNoTrabajadas);
         semExtraMs += parseMs(reg.horasExtra);
         semDiaMs += parseMs(reg.totalDia);
@@ -168,13 +168,13 @@ export class ReportesService {
           jornadaPactada = `${formatTimeStr(reg.entradaTeorica)} - ${formatTimeStr(reg.salidaTeorica)}`;
         }
 
+        const displayColacionStr = formatMs(parseMs(reg.colacionTeorica)).substring(0, 5);
         let colacionLimpia = '-';
-        const colacionMins = Math.floor(rowColMs / 60000);
 
         if (reg.inicioColacionTeorica && reg.inicioColacionTeorica !== '-' && reg.finColacionTeorica && reg.finColacionTeorica !== '-') {
-          colacionLimpia = `${formatTimeStr(reg.inicioColacionTeorica)} - ${formatTimeStr(reg.finColacionTeorica)} (C: ${colacionMins})`;
-        } else if (colacionMins > 0) {
-          colacionLimpia = `${formatTimeStr(reg.colacionTeorica)} (C: ${colacionMins})`;
+          colacionLimpia = `${formatTimeStr(reg.inicioColacionTeorica)} - ${formatTimeStr(reg.finColacionTeorica)} (C: ${displayColacionStr})`;
+        } else if (displayColacionStr !== '00:00') {
+          colacionLimpia = `${formatTimeStr(reg.colacionTeorica)} (C: ${displayColacionStr})`;
         }
 
         let marcacionesJornada = '-';
@@ -208,13 +208,33 @@ export class ReportesService {
           }
         }
 
+        let faltanteCelda: any = '- 00:00:00';
+        const msAtraso = parseMs(reg.atraso);
+        const msFaltanteTotal = parseMs(reg.horasNoTrabajadas);
+        const msSalidaAnticipada = msFaltanteTotal - msAtraso;
+
+        if (msFaltanteTotal > 0) {
+          const lines: string[] = [];
+          if (msAtraso > 0) {
+            lines.push(`A.T: -${formatMs(msAtraso)}`);
+          }
+          if (msSalidaAnticipada > 0) {
+            lines.push(`S.A: -${formatMs(msSalidaAnticipada)}`);
+          }
+          // Si por alguna razón hay faltante pero no es atraso ni salida (ej: ausencia total), mostramos el total
+          if (lines.length === 0) {
+            lines.push(`- ${formatMs(msFaltanteTotal)}`);
+          }
+          faltanteCelda = lines.join('\n');
+        }
+
         tableBody.push([
           fechaFormateada,
           jornadaPactada,
           marcacionesJornada,
           colacionLimpia,
           marcacionesColacion,
-          reg.horasNoTrabajadas && reg.horasNoTrabajadas !== '-' && reg.horasNoTrabajadas !== '00:00' ? '- ' + formatTimeStr(reg.horasNoTrabajadas) : '- 00:00:00',
+          { text: faltanteCelda, fontSize: 8 },
           reg.horasExtra && reg.horasExtra !== '-' && reg.horasExtra !== '00:00' ? '+ ' + formatTimeStr(reg.horasExtra) : '+ 00:00:00',
           otrasMarcaciones,
           reg.observacion,
@@ -225,9 +245,6 @@ export class ReportesService {
         const isLastRecord = i === data.registros.length - 1;
 
         if (isSunday || isLastRecord) {
-          const balanceFinalMs = semExtraMs - semNoTrabajadasMs;
-          const balanceFinalStr = balanceFinalMs >= 0 ? '+ ' + formatMs(balanceFinalMs) : '- ' + formatMs(Math.abs(balanceFinalMs));
-
           tableBody.push([
             { text: 'Total Semana', style: 'tableHeader', alignment: 'right' },
             { text: formatMs(semTeoricasMs), style: 'tableHeader' },
@@ -238,7 +255,7 @@ export class ReportesService {
             { text: '+ ' + formatMs(semExtraMs), style: 'tableHeader' },
             { text: '', style: 'tableHeader' },
             { text: '', style: 'tableHeader' },
-            { text: balanceFinalStr, style: 'tableHeader', alignment: 'right' }
+            { text: '', style: 'tableHeader' }
           ]);
 
           semTeoricasMs = 0;
@@ -980,111 +997,111 @@ export class ReportesService {
 
           let asistenciaTxt = 'NO';
           let ausenciaTxt = '';
-        let observacionTxt = isFeriado ? 'FERIADO' : 'DOMINGO';
-        let asistio = false;
-        let debioAsistir = false;
+          let observacionTxt = isFeriado ? 'FERIADO' : 'DOMINGO';
+          let asistio = false;
+          let debioAsistir = false;
 
-        if (reg) {
-          const tieneEntrada = reg.entrada && reg.entrada !== '-';
-          const tieneSalida = reg.salida && reg.salida !== '-';
-          const tieneHorasTeoricas = reg.horasTeoricas !== '-' && reg.horasTeoricas !== '00:00';
+          if (reg) {
+            const tieneEntrada = reg.entrada && reg.entrada !== '-';
+            const tieneSalida = reg.salida && reg.salida !== '-';
+            const tieneHorasTeoricas = reg.horasTeoricas !== '-' && reg.horasTeoricas !== '00:00';
 
-          if (tieneEntrada || tieneSalida) {
-            asistio = true;
-            debioAsistir = true;
-            asistenciaTxt = 'SI';
-            observacionTxt = 'PRESENTE CON MARCA';
-          } else {
-            asistenciaTxt = 'NO';
-            if (tieneHorasTeoricas) {
+            if (tieneEntrada || tieneSalida) {
+              asistio = true;
               debioAsistir = true;
-              if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA') || reg.observacion.includes('VACACIONES') || reg.observacion.includes('LICENCIA')) {
-                ausenciaTxt = 'JUSTIFICADA';
-                observacionTxt = reg.observacion || 'AUSENCIA JUSTIFICADA';
-              } else {
-                ausenciaTxt = 'INJUSTIFICADA';
-                observacionTxt = reg.observacion && reg.observacion !== 'Feriado' ? reg.observacion : 'INASISTENCIA INJUSTIFICADA';
-              }
+              asistenciaTxt = 'SI';
+              observacionTxt = 'PRESENTE CON MARCA';
             } else {
-              debioAsistir = false;
+              asistenciaTxt = 'NO';
+              if (tieneHorasTeoricas) {
+                debioAsistir = true;
+                if ((reg.horasJustificadas !== '-' && reg.horasJustificadas !== '00:00') || reg.observacion.includes('AUSENCIA') || reg.observacion.includes('JUSTIFICADA') || reg.observacion.includes('VACACIONES') || reg.observacion.includes('LICENCIA')) {
+                  ausenciaTxt = 'JUSTIFICADA';
+                  observacionTxt = reg.observacion || 'AUSENCIA JUSTIFICADA';
+                } else {
+                  ausenciaTxt = 'INJUSTIFICADA';
+                  observacionTxt = reg.observacion && reg.observacion !== 'Feriado' ? reg.observacion : 'INASISTENCIA INJUSTIFICADA';
+                }
+              } else {
+                debioAsistir = false;
+              }
             }
           }
-        }
 
-        if (asistio || debioAsistir) {
-          trabajaDomingosOFestivos = true;
-        }
+          if (asistio || debioAsistir) {
+            trabajaDomingosOFestivos = true;
+          }
 
-        diasValidos.push({
-          month: m,
-          year: year,
-          fDisplay,
-          asistenciaTxt,
-          ausenciaTxt,
-          observacionTxt,
-          asistio
-        });
+          diasValidos.push({
+            month: m,
+            year: year,
+            fDisplay,
+            asistenciaTxt,
+            ausenciaTxt,
+            observacionTxt,
+            asistio
+          });
+        }
       }
-    }
 
-    let sumatoriaTotal = 0;
+      let sumatoriaTotal = 0;
 
-    if (!trabajaDomingosOFestivos) {
-      tableBody.push([
-        { text: 'La jornada de este trabajador no incluye domingos o festivos', colSpan: 5, alignment: 'center' },
-        {}, {}, {}, {}
-      ]);
-    } else {
-      let currentMonth = diasValidos[0].month;
-      let currentYear = diasValidos[0].year;
-      let sumatoriaMensual = 0;
+      if (!trabajaDomingosOFestivos) {
+        tableBody.push([
+          { text: 'La jornada de este trabajador no incluye domingos o festivos', colSpan: 5, alignment: 'center' },
+          {}, {}, {}, {}
+        ]);
+      } else {
+        let currentMonth = diasValidos[0].month;
+        let currentYear = diasValidos[0].year;
+        let sumatoriaMensual = 0;
 
-      for (let i = 0; i < diasValidos.length; i++) {
-        const dia = diasValidos[i];
+        for (let i = 0; i < diasValidos.length; i++) {
+          const dia = diasValidos[i];
 
-        if (dia.month !== currentMonth || dia.year !== currentYear) {
+          if (dia.month !== currentMonth || dia.year !== currentYear) {
+            tableBody.push([
+              { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
+              {},
+              { text: String(sumatoriaMensual), bold: true },
+              {},
+              {}
+            ]);
+            currentMonth = dia.month;
+            currentYear = dia.year;
+            sumatoriaMensual = 0;
+          }
+
+          if (dia.asistio) {
+            sumatoriaMensual++;
+            sumatoriaTotal++;
+          }
+
           tableBody.push([
-            { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
-            {},
-            { text: String(sumatoriaMensual), bold: true },
-            {},
-            {}
+            'No',
+            dia.fDisplay,
+            dia.asistenciaTxt,
+            dia.ausenciaTxt,
+            dia.observacionTxt.toUpperCase()
           ]);
-          currentMonth = dia.month;
-          currentYear = dia.year;
-          sumatoriaMensual = 0;
-        }
-
-        if (dia.asistio) {
-          sumatoriaMensual++;
-          sumatoriaTotal++;
         }
 
         tableBody.push([
-          'No',
-          dia.fDisplay,
-          dia.asistenciaTxt,
-          dia.ausenciaTxt,
-          dia.observacionTxt.toUpperCase()
+          { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
+          {},
+          { text: String(sumatoriaMensual), bold: true },
+          {},
+          {}
+        ]);
+
+        tableBody.push([
+          { text: `Sumatoria total periodo`, colSpan: 2, alignment: 'right', bold: true },
+          {},
+          { text: String(sumatoriaTotal), bold: true },
+          {},
+          {}
         ]);
       }
-
-      tableBody.push([
-        { text: `Sumatoria mensual (${String(currentMonth).padStart(2, '0')}/${currentYear})`, colSpan: 2, alignment: 'right', bold: true },
-        {},
-        { text: String(sumatoriaMensual), bold: true },
-        {},
-        {}
-      ]);
-
-      tableBody.push([
-        { text: `Sumatoria total periodo`, colSpan: 2, alignment: 'right', bold: true },
-        {},
-        { text: String(sumatoriaTotal), bold: true },
-        {},
-        {}
-      ]);
-    }
 
       contentArr.push(
         {
@@ -1196,18 +1213,18 @@ export class ReportesService {
 
       const dInicio = new Date(fechaInicio + 'T00:00:00');
       const dFin = new Date(fechaFin + 'T23:59:59');
-      
+
       console.log(`[DEBUG] Buscando para ficha: ${numFicha}, desde: ${dInicio.toISOString()}, hasta: ${dFin.toISOString()}`);
 
       const query = this.auditoriaTurnoRepository.createQueryBuilder('audit');
       query.andWhere('audit.fecha_asignacion_turno >= :inicio', { inicio: dInicio });
       query.andWhere('audit.fecha_asignacion_turno <= :fin', { fin: dFin });
       query.andWhere('audit.run_empleado = :numFicha', { numFicha });
-      
+
       const logs = await query.orderBy('audit.fecha_asignacion_turno', 'DESC').getMany();
       console.log(`[DEBUG] Auditoria logs encontrados:`, logs.length);
       if (logs.length > 0) {
-          console.log(`[DEBUG] Primer log run_empleado: ${logs[0].run_empleado}, fecha: ${logs[0].fecha_asignacion_turno}`);
+        console.log(`[DEBUG] Primer log run_empleado: ${logs[0].run_empleado}, fecha: ${logs[0].fecha_asignacion_turno}`);
       }
 
       contentArr.push({
@@ -1266,9 +1283,9 @@ export class ReportesService {
       }
 
       if (fIndex < numFichas.length - 1) {
-        contentArr.push({ 
+        contentArr.push({
           canvas: [{ type: 'line', x1: 0, y1: 5, x2: 750, y2: 5, lineWidth: 0.5, lineColor: '#cccccc' }],
-          margin: [0, 15, 0, 15] 
+          margin: [0, 15, 0, 15]
         });
       }
     }
@@ -1341,7 +1358,7 @@ export class ReportesService {
 
   async generateDailyMarkingsPdf(fecha: string, idUsuario?: number, ip?: string, userAgent?: string): Promise<Buffer> {
     const marcas = await this.marcasService.findAll('', fecha, fecha);
-    
+
     // Agrupar por empleado
     const groups = new Map<string, any>();
     marcas.forEach(m => {
