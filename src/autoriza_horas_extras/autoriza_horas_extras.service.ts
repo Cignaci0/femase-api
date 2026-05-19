@@ -3,7 +3,7 @@ import { CreateAutorizaHorasExtraDto } from './dto/create-autoriza_horas_extra.d
 import { UpdateAutorizaHorasExtraDto } from './dto/update-autoriza_horas_extra.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AutorizaHorasExtra } from './entities/autoriza_horas_extra.entity';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Marca } from 'src/marcas/entities/marca.entity';
 import { Turno } from 'src/turno/entities/turno.entity';
@@ -42,6 +42,19 @@ export class AutorizaHorasExtrasService {
       return hours + (minutes || 0) / 60;
     };
 
+
+    const existeRegistro = await this.autorizaHorasExtrasRepository.findOne({
+      where: {
+        fecha_marca: dia_actual,
+        empleado: { empleado_id: empleado.empleado_id },
+        estado: "P"
+      }
+    })
+
+    if (existeRegistro) {
+      await this.autorizaHorasExtrasRepository.delete(existeRegistro.id);
+    }
+
     const formatHoursToTimeString = (decimalHours: number): string => {
       const absoluteHours = Math.floor(decimalHours);
       const minutes = Math.floor((decimalHours - absoluteHours) * 60);
@@ -51,7 +64,7 @@ export class AutorizaHorasExtrasService {
 
       return `${pad(absoluteHours)}:${pad(minutes)}:${pad(seconds)}`;
     };
-    
+
     // Consultar marcas de hoy para el empleado
     const tieneMarcas = await this.marcaRepository.find({
       where: [{
@@ -129,7 +142,8 @@ export class AutorizaHorasExtrasService {
             horas_presenciales: formatHoursToTimeString(horas_trabajadas),
             observacion: 'Posee horas extras por confirmar',
             horas_extras: formatHoursToTimeString(horas_trabajadas - horaTeorica),
-            estado: 'P'
+            estado: 'P',
+            empleado: { empleado_id: empleado.empleado_id }
           })
         }
       } else if (empleado.turno === null && empleado.permite_rotativo === true) {
@@ -157,7 +171,9 @@ export class AutorizaHorasExtrasService {
               horas_presenciales: formatHoursToTimeString(horas_trabajadas),
               observacion: 'Posee horas extras por confirmar',
               horas_extras: formatHoursToTimeString(horas_trabajadas - horaTeorica),
-              estado: 'P'
+              estado: 'P',
+              empleado: { empleado_id: empleado.empleado_id }
+
             })
           }
         }
@@ -165,9 +181,13 @@ export class AutorizaHorasExtrasService {
     }
   }
 
-  findAll() {
+  findAll(numFicha: string, fecha_inicio: Date, fecha_fin: Date) {
     return this.autorizaHorasExtrasRepository.find({
       relations: ['cargo'],
+      where: {
+        empleado: { num_ficha: numFicha },
+        fecha_marca: Between(fecha_inicio, fecha_fin)
+      },
       select: {
         cargo: {
           cargo_id: true,
@@ -182,7 +202,7 @@ export class AutorizaHorasExtrasService {
   }
 
   update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
-    return `This action updates a #${id} autorizaHorasExtra`;
+    return this.autorizaHorasExtrasRepository.update(id, updateAutorizaHorasExtraDto);
   }
 
   remove(id: number) {
