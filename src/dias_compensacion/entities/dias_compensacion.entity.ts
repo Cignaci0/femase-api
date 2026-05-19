@@ -15,4 +15,7 @@ export class DiasCompensacion {
 
     @Column()
     fecha: Date
+
+    @Column({ default: "00:00:00" })
+    horas_descontadas: string
 }
