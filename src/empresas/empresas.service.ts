@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Empresa } from './empresas.entity';
 import { Repository } from 'typeorm';
@@ -9,6 +9,9 @@ import { log } from 'util';
 import * as fs from 'fs';
 import { join } from 'path';
 import { User } from 'src/users/user.entity';
+import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class EmpresasService {
@@ -59,12 +62,52 @@ export class EmpresasService {
     }
   }
 
-  async create(empresa: Empresa) {
+  async create(empresa: Empresa, idUsuario: number, ip: string, userAgent: string) {
     const nuevaEmpresa = this.empresaRepository.create(empresa);
-    return await this.empresaRepository.save(nuevaEmpresa);
+    const guardada = await this.empresaRepository.save(nuevaEmpresa);
+
+    // --- AUDITORÍA ---
+    const autor = await this.empresaRepository.manager.findOne(User, {
+      where: { usuario_id: idUsuario },
+      relations: ['empleado', 'empresa']
+    });
+
+    let empleadoAutor: Empleado | null = null;
+    if (autor?.empleado?.empleado_id) {
+      empleadoAutor = await this.empresaRepository.manager.findOne(Empleado, {
+        where: { empleado_id: autor.empleado.empleado_id },
+        relations: ['empresa', 'cenco', 'cenco.departamento']
+      });
+    }
+
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+    const sistemaOperativo = os.name || 'Desconocido';
+
+    const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
+      usuario: autor?.username,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado la empresa "${guardada.nombre_empresa}"`,
+      tipo_evento: 'Creación de Empresa',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: sistemaOperativo,
+      browser: navegador,
+      empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+      depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: autor?.run_usuario
+    });
+
+    await this.empresaRepository.manager.save(registroEvento);
+    // -----------------
+
+    return guardada;
   }
 
-  async actualizarEmpresa(id: number, updateDto: UpdateEmpresaDto): Promise<any> {
+  async actualizarEmpresa(id: number, updateDto: UpdateEmpresaDto, idUsuario: number, ip: string, userAgent: string): Promise<any> {
     // 1. Preload busca por ID y "mezcla" los datos nuevos con los existentes
     const empresa = await this.empresaRepository.preload({
       empresa_id: id,
@@ -79,6 +122,44 @@ export class EmpresasService {
     try {
       // 3. Guardamos los cambios (esto disparará validaciones de BD)
       const actualizada = await this.empresaRepository.save(empresa);
+
+      // --- AUDITORÍA ---
+      const autor = await this.empresaRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      let empleadoAutor: Empleado | null = null;
+      if (autor?.empleado?.empleado_id) {
+        empleadoAutor = await this.empresaRepository.manager.findOne(Empleado, {
+          where: { empleado_id: autor.empleado.empleado_id },
+          relations: ['empresa', 'cenco', 'cenco.departamento']
+        });
+      }
+
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+      const sistemaOperativo = os.name || 'Desconocido';
+
+      const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
+        usuario: autor?.username,
+        evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha editado la empresa "${actualizada.nombre_empresa}"`,
+        tipo_evento: 'Edición de Empresa',
+        ip: ip,
+        fecha: new Date(),
+        hora: new Date().toTimeString().split(' ')[0],
+        sistema_operativo: sistemaOperativo,
+        browser: navegador,
+        empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+        depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+        cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+        rut: autor?.run_usuario
+      });
+
+      await this.empresaRepository.manager.save(registroEvento);
+      // -----------------
 
       // 4. Retornamos respuesta personalizada
       return {
@@ -96,13 +177,52 @@ export class EmpresasService {
     }
   }
 
-  async actualizarHorario(id: number, horario: number) {
+  async actualizarHorario(id: number, horario: number, idUsuario: number, ip: string, userAgent: string) {
     const empresa = await this.empresaRepository.findOne({ where: { empresa_id: id } });
     if (!empresa) {
       throw new NotFoundException('Empresa no encontrada');
     }
     empresa.horario = horario;
     const actualizada = await this.empresaRepository.save(empresa);
+
+    // --- AUDITORÍA ---
+    const autor = await this.empresaRepository.manager.findOne(User, {
+      where: { usuario_id: idUsuario },
+      relations: ['empleado', 'empresa']
+    });
+
+    let empleadoAutor: Empleado | null = null;
+    if (autor?.empleado?.empleado_id) {
+      empleadoAutor = await this.empresaRepository.manager.findOne(Empleado, {
+        where: { empleado_id: autor.empleado.empleado_id },
+        relations: ['empresa', 'cenco', 'cenco.departamento']
+      });
+    }
+
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+    const sistemaOperativo = os.name || 'Desconocido';
+
+    const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
+      usuario: autor?.username,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el horario de la empresa "${actualizada.nombre_empresa}" a ${actualizada.horario} horas`,
+      tipo_evento: 'Cambio de Zona Horaria',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: sistemaOperativo,
+      browser: navegador,
+      empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+      depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: autor?.run_usuario
+    });
+
+    await this.empresaRepository.manager.save(registroEvento);
+    // -----------------
+
     return {
       mensaje: 'Horario actualizado con éxito',
       id: actualizada.empresa_id,
@@ -110,7 +230,7 @@ export class EmpresasService {
     };
   }
 
-  async actualizarLogo(id: number, filename: string) {
+  async actualizarLogo(id: number, filename: string, idUsuario: number, ip: string, userAgent: string) {
     const empresa = await this.empresaRepository.findOne({ where: { empresa_id: id } });
 
     if (!empresa) {
@@ -124,7 +244,50 @@ export class EmpresasService {
     }
     // Actualizamos el nombre del nuevo archivo en la base de datos
     empresa.urlLogo = filename;
-    await this.empresaRepository.save(empresa);
+    const actualizada = await this.empresaRepository.save(empresa);
+
+    // --- AUDITORÍA (Protegida contra NaN/null) ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empresaRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empresaRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent);
+        const browser = parser.getBrowser();
+        const os = parser.getOS();
+        const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+        const sistemaOperativo = os.name || 'Desconocido';
+
+        const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el logo de la empresa "${actualizada.nombre_empresa}"`,
+          tipo_evento: 'Actualización de Logo',
+          ip: ip,
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: sistemaOperativo,
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empresaRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
     return {
       mensaje: 'Logo actualizado con éxito',
       urlLogo: filename

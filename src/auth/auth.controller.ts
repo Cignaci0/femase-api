@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import type { Request } from 'express';
 import { AuthGuard } from './auth.guard';
@@ -27,5 +27,11 @@ export class AuthController {
     await this.sesionActivaService.eliminarSesion(usuarioId);
 
     return { mensaje: 'Sesión cerrada correctamente' };
+  }
+
+  @Get('refresh')
+  @UseGuards(AuthGuard)
+  async refresh(@Req() req) {
+    return this.authService.refreshToken(req);
   }
 }

@@ -19,7 +19,7 @@ export class AuthService {
     username: string,
     pass: string,
     req: Request
-  ): Promise<{ token: string, username: string, profile: string, profile_id: number, empresa_id: number, empresa: string, num_ficha: string, rut: string, rut_usuario: string, usuario_id: number }> {
+  ): Promise<{ token: string, username: string, profile: string, profile_id: number, empresa_id: number, empresa: string, num_ficha: string, rut: string, rut_usuario: string, usuario_id: number, cargo: number }> {
 
     const user = await this.usersService.searchActiveUser(username);
 
@@ -54,7 +54,8 @@ export class AuthService {
       rut: user.empleado?.run || null,
       empresa_id: user.empresa?.empresa_id || null,
       rut_usuario: user.run_usuario,
-      usuario_id: user.usuario_id
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
     };
 
     // Registrar la sesión activa
@@ -69,9 +70,11 @@ export class AuthService {
       correo: user.empleado?.email_laboral || user.email,
       rut: user.empleado?.run || user.run_usuario,
       ip: ip,
-      empresa: user.empleado?.empresa?.empresa_id || user.empresa?.empresa_id
+      empresa: user.empleado?.empresa?.empresa_id || user.empresa?.empresa_id,
+      idusuario: user.usuario_id,
+      username: user.username
     });
-    
+
 
     return {
       token: await this.jwtService.signAsync(payload),
@@ -83,9 +86,45 @@ export class AuthService {
       num_ficha: user.empleado?.num_ficha || '',
       rut: user.empleado?.run || '',
       rut_usuario: user.run_usuario,
-      usuario_id: user.usuario_id
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
+    };
+  }
+
+  async refreshToken(req: any) {
+    const username = req['user'].username;
+    const user = await this.usersService.searchActiveUser(username);
+
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    }
+
+    const payload = {
+      sub: user.usuario_id,
+      username: user.username,
+      profile: user.perfil?.perfil_id,
+      num_ficha: user.empleado?.num_ficha || null,
+      nombre_completo: user.empleado ? `${user.empleado.nombres} ${user.empleado.apellido_paterno} ${user.empleado.apellido_materno}` : user.username,
+      empresa: user.empresa?.nombre_empresa || null,
+      rut: user.empleado?.run || null,
+      empresa_id: user.empresa?.empresa_id || null,
+      rut_usuario: user.run_usuario,
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
     };
 
-
+    return {
+      token: await this.jwtService.signAsync(payload),
+      username: user.username,
+      profile_id: user.perfil?.perfil_id || 0,
+      profile: user.perfil?.nombre_perfil || '',
+      empresa_id: user.empresa?.empresa_id || 0,
+      empresa: user.empresa?.nombre_empresa || '',
+      num_ficha: user.empleado?.num_ficha || '',
+      rut: user.empleado?.run || '',
+      rut_usuario: user.run_usuario,
+      usuario_id: user.usuario_id,
+      cargo: user.empleado?.cargo?.tipo_cargo || 0
+    };
   }
 }

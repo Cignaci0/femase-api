@@ -1,1 +1,3 @@
-export class CreateAutorizaHorasExtraDto {}
+export class CreateAutorizaHorasExtraDto {
+  numFicha: string;
+}

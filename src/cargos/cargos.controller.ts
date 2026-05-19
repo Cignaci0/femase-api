@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, Ip, Headers } from '@nestjs/common';
 import { CargosService } from './cargos.service';
 import { UpdateCargoDto } from './dto/update-cargo.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
@@ -10,9 +10,14 @@ export class CargosController {
   constructor(private readonly cargosService: CargosService) { }
 
   @Post('crear')
-  create(@Body() createCargoDto: Cargo, @Req() req) {
-    const usuario = req.user.username;
-    return this.cargosService.create(createCargoDto, usuario);
+  create(
+    @Body() createCargoDto: Cargo, 
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.cargosService.create(createCargoDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -22,8 +27,15 @@ export class CargosController {
   }
 
   @Patch('actualizar/:id')
-  update(@Param('id') id: string, @Body() updateCargoDto: UpdateCargoDto) {
-    return this.cargosService.update(+id, updateCargoDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateCargoDto: UpdateCargoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.cargosService.update(+id, updateCargoDto, idUsuario, ip, userAgent);
   }
 
   @Get('por-empresa/:empresaId')

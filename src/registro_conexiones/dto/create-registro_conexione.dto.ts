@@ -5,4 +5,6 @@ export class CreateRegistroConexioneDto {
     rut: string;
     ip: string;
     empresa: number;
+    idusuario: number;
+    username:string;
 }

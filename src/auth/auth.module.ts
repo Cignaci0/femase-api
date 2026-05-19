@@ -18,7 +18,7 @@ import { RegistroConexionesModule } from 'src/registro_conexiones/registro_conex
     JwtModule.register({
       global: true,
       secret: jwtConstants.secret,
-      signOptions: { expiresIn: '4h' }
+      signOptions: { expiresIn: '15min' }
     })
   ],
   providers: [AuthService, JwtStrategy],

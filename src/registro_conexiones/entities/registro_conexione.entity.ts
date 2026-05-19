@@ -1,4 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Empresa } from "../../empresas/empresas.entity";
+import { User } from "src/users/user.entity";
 
 @Entity({ name: 'registro_conexiones', schema: 'db_fmc' })
 export class RegistroConexione {
@@ -20,6 +22,14 @@ export class RegistroConexione {
     @Column()
     ip:string
 
+    @ManyToOne(() => Empresa)
+    @JoinColumn({ name: 'empresa' })
+    empresa: Empresa;
+
+    @ManyToOne(() => User)
+    @JoinColumn({name:'idusuario'})
+    idusuario: User
+    
     @Column()
-    empresa:number;
+    username:string
 }

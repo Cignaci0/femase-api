@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Ip, Headers, Req } from '@nestjs/common';
 import { HorasLegalesService } from './horas_legales.service';
 import { CreateHorasLegaleDto } from './dto/create-horas_legale.dto';
 import { UpdateHorasLegaleDto } from './dto/update-horas_legale.dto';
@@ -23,8 +23,15 @@ export class HorasLegalesController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateHorasLegaleDto: UpdateHorasLegaleDto) {
-    return this.horasLegalesService.update(+id, updateHorasLegaleDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateHorasLegaleDto: UpdateHorasLegaleDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.horasLegalesService.update(+id, updateHorasLegaleDto, idUsuario, ip, userAgent);
   }
 
   @Delete(':id')

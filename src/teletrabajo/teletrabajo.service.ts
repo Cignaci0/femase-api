@@ -8,7 +8,10 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { DetalleTurno } from 'src/detalle-turno/entities/detalle-turno.entity';
 import { AsignacionTurnoRotativo } from 'src/asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
-
+import { Horario } from 'src/horario/entities/horario.entity';
+import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 @Injectable()
 export class TeletrabajoService {
   constructor(
@@ -25,7 +28,7 @@ export class TeletrabajoService {
   ) { }
 
 
-  async asignarTeletrabajo(idEmpleado: number, fecha_inicio: string, fecha_fin: string) {
+  async asignarTeletrabajo(idEmpleado: number, fecha_inicio: string, fecha_fin: string, idUsuario?: number, ip?: string, userAgent?: string) {
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: idEmpleado },
       relations: { turno: true }
@@ -174,6 +177,45 @@ export class TeletrabajoService {
       }
       throw new NotFoundException("No presenta horario para los dias seleccionados");
     }
+
+    // --- AUDITORÍA ---
+    if (totalExitos > 0 && idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.teletrabajoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.teletrabajoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.teletrabajoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha asignado teletrabajo al empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) desde el ${fecha_inicio} al ${fecha_fin}. Se asignaron ${totalExitos} días.`,
+          tipo_evento: 'Asignación Teletrabajo',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.teletrabajoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
 
     return {
       message: `Procesamiento completado. Se asignaron ${totalExitos} días correctamente.`
@@ -332,7 +374,7 @@ export class TeletrabajoService {
 
 
 
-  async editarTeletrabajo(idEmpleado: number, id: number, horarioId: number) {
+  async editarTeletrabajo(idEmpleado: number, id: number, horarioId: number, idUsuario?: number, ip?: string, userAgent?: string) {
     // 1. Cargamos al empleado con su relación de turno para saber qué tipo de horario usa
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: idEmpleado },
@@ -360,6 +402,50 @@ export class TeletrabajoService {
         horario_id: { horario_id: horarioId } as any,
       });
 
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.teletrabajoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.teletrabajoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent || '');
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          // Buscamos el horario para mostrar las horas en el log
+          const infoHorario = await this.teletrabajoRepository.manager.findOne(Horario, {
+            where: { horario_id: horarioId }
+          });
+
+          const registroEvento = this.teletrabajoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha modificado el teletrabajo (Normal) del empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) para la fecha ${teletrabajo.fecha_actual?.toISOString().split('T')[0] || 'N/A'}, asignando el nuevo horario: ${infoHorario?.hora_entrada || 'N/A'} - ${infoHorario?.hora_salida || 'N/A'}.`,
+            tipo_evento: 'Modificación Teletrabajo',
+            ip: ip || 'Desconocida',
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.teletrabajoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
       return {
         message: "Teletrabajo (Normal) actualizado correctamente",
         update
@@ -383,6 +469,50 @@ export class TeletrabajoService {
         horario: { horario_id: horarioId } as any
       });
 
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.teletrabajoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.teletrabajoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent || '');
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          // Buscamos el horario para mostrar las horas en el log
+          const infoHorario = await this.teletrabajoRepository.manager.findOne(Horario, {
+            where: { horario_id: horarioId }
+          });
+
+          const registroEvento = this.teletrabajoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha modificado el teletrabajo (Rotativo) del empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) para la fecha ${turnoRotativo.fecha_inicio_turno?.toISOString().split('T')[0] || 'N/A'}, asignando el nuevo horario: ${infoHorario?.hora_entrada || 'N/A'} - ${infoHorario?.hora_salida || 'N/A'}.`,
+            tipo_evento: 'Modificación Teletrabajo',
+            ip: ip || 'Desconocida',
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.teletrabajoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
       return {
         message: "Turno rotativo actualizado correctamente",
         update
@@ -392,7 +522,7 @@ export class TeletrabajoService {
     throw new NotFoundException("El empleado no tiene un tipo de turno válido para editar");
   }
 
-  async eliminarTeletrabajo(idEmpleado: number, id: number) {
+  async eliminarTeletrabajo(idEmpleado: number, id: number, idUsuario?: number, ip?: string, userAgent?: string) {
     // 1. Identificamos al empleado y su tipo de turno
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: idEmpleado },
@@ -417,6 +547,46 @@ export class TeletrabajoService {
       }
 
       await this.teletrabajoRepository.delete(id);
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.teletrabajoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.teletrabajoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent || '');
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.teletrabajoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha eliminado el teletrabajo (Normal) del empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) correspondiente a la fecha ${teletrabajo.fecha_actual?.toISOString().split('T')[0] || 'N/A'}.`,
+            tipo_evento: 'Eliminación Teletrabajo',
+            ip: ip || 'Desconocida',
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.teletrabajoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
       return { message: "Registro de teletrabajo eliminado correctamente" };
     }
 
@@ -436,6 +606,45 @@ export class TeletrabajoService {
       await this.asignacionTurnoRotativoRepository.update(id, {
         teletrabajo: false
       });
+
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.teletrabajoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.teletrabajoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent || '');
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.teletrabajoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha eliminado el teletrabajo (Rotativo) del empleado "${empleado.nombres} ${empleado.apellido_paterno}" (Ficha: ${empleado.num_ficha}) correspondiente a la fecha ${turnoRotativo.fecha_inicio_turno?.toISOString().split('T')[0] || 'N/A'}.`,
+            tipo_evento: 'Eliminación Teletrabajo',
+            ip: ip || 'Desconocida',
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.teletrabajoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
 
       return { message: "Teletrabajo removido del turno rotativo correctamente" };
     }

@@ -1,15 +1,23 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Ip, Headers } from '@nestjs/common';
 import { TipoAusenciaService } from './tipo-ausencia.service';
 import { CreateTipoAusenciaDto } from './dto/create-tipo-ausencia.dto';
 import { UpdateTipoAusenciaDto } from './dto/update-tipo-ausencia.dto';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('tipo-ausencia')
+@UseGuards(AuthGuard)
 export class TipoAusenciaController {
   constructor(private readonly tipoAusenciaService: TipoAusenciaService) {}
 
   @Post("crear")
-  create(@Body() createTipoAusenciaDto: CreateTipoAusenciaDto) {
-    return this.tipoAusenciaService.create(createTipoAusenciaDto);
+  create(
+    @Body() createTipoAusenciaDto: CreateTipoAusenciaDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.tipoAusenciaService.create(createTipoAusenciaDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -23,8 +31,15 @@ export class TipoAusenciaController {
   }
 
   @Patch('actualizar/:id')
-  update(@Param('id') id: string, @Body() updateTipoAusenciaDto: UpdateTipoAusenciaDto) {
-    return this.tipoAusenciaService.update(+id, updateTipoAusenciaDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateTipoAusenciaDto: UpdateTipoAusenciaDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.tipoAusenciaService.update(+id, updateTipoAusenciaDto, idUsuario, ip, userAgent);
   }
 
   @Delete(':id')

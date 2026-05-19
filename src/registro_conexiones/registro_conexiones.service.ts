@@ -13,12 +13,36 @@ export class RegistroConexionesService {
   ) { }
 
   async create(createRegistroConexioneDto: CreateRegistroConexioneDto) {
-    const nuevaConexion = this.registroConexioneRepository.create(createRegistroConexioneDto);
+    const payload = {
+      ...createRegistroConexioneDto,
+      empresa: { empresa_id: createRegistroConexioneDto.empresa }
+    };
+    const nuevaConexion = this.registroConexioneRepository.create(payload as any);
     return await this.registroConexioneRepository.save(nuevaConexion);
   }
 
-  findAll() {
-    return this.registroConexioneRepository.find();
+  async findAll(page: number = 1, limit: number = 10, idEmpresa?: number) {
+    const skip = (page - 1) * limit;
+    
+    const where: any = {};
+    if (idEmpresa) {
+      where.empresa = { empresa_id: idEmpresa };
+    }
+
+    const [data, total] = await this.registroConexioneRepository.findAndCount({
+      where,
+      relations: ['empresa'],
+      order: { id: 'DESC' },
+      take: limit,
+      skip: skip,
+    });
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   findOne(id: number) {

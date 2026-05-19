@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Req, UseGuards, Ip, Headers } from '@nestjs/common';
 import { CencosService } from './cencos.service';
 import { Cenco } from './cenco.entity';
 import { UpdateCencoDTO } from './dto/update-cenco.dto';
@@ -22,21 +22,38 @@ export class CencosController {
   @Post('')
   @ApiOperation({ summary: 'Crear un nuevo Cenco (opcionalmente con dispositivos)' })
   @ApiResponse({ status: 201, description: 'El centro ha sido creado con éxito.' })
-  async create(@Body() createCencoDto: CreateCencoDto) {
-    return await this.cencoService.create(createCencoDto);
+  async create(
+    @Body() createCencoDto: CreateCencoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return await this.cencoService.create(createCencoDto, idUsuario, ip, userAgent);
   }
 
   @Patch('actualizar/:id')
-  actualizar(@Param('id') id: string, @Body() updateDto: UpdateCencoDTO) {
-    return this.cencoService.actualizarCenco(+id, updateDto);
+  actualizar(
+    @Param('id') id: string, 
+    @Body() updateDto: UpdateCencoDTO,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.cencoService.actualizarCenco(+id, updateDto, idUsuario, ip, userAgent);
   }
 
   @Patch(':id/turnos')
   async updateTurnos(
     @Param('id', ParseIntPipe) id: number,
-    @Body('turno_ids') turnoIds: number[]
+    @Body('turno_ids') turnoIds: number[],
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
-    return await this.cencoService.asignarTurnos(id, turnoIds);
+    const idUsuario = req.user.sub;
+    return await this.cencoService.asignarTurnos(id, turnoIds, idUsuario, ip, userAgent);
   }
 
   @Put('asignar-turnos/:id')
@@ -44,9 +61,13 @@ export class CencosController {
   async syncTurnos(
     @Param('id', ParseIntPipe) id: number,
     @Body('turnoIds') turnoIds: number[],
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
+    const idUsuario = req.user.sub;
     // Si el usuario desmarcó todos, turnoIds vendrá como [] y .set([]) limpiará la tabla.
-    return await this.cencoService.asignarTurnos(id, turnoIds);
+    return await this.cencoService.asignarTurnos(id, turnoIds, idUsuario, ip, userAgent);
   }
 
   @Get('buscar-cencos-usuario')

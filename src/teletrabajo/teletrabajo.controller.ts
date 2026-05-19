@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, Query, Req, Ip, Headers, UseGuards } from '@nestjs/common';
+import { AuthGuard } from 'src/auth/auth.guard';
 import { TeletrabajoService } from './teletrabajo.service';
 
 @Controller('teletrabajo')
@@ -6,8 +7,16 @@ export class TeletrabajoController {
   constructor(private readonly teletrabajoService: TeletrabajoService) { }
 
   @Post('asignar/:idEmpleado')
-  asignarTeletrabajo(@Param('idEmpleado') idEmpleado: number, @Body() body: { fecha_inicio: string, fecha_fin: string }) {
-    return this.teletrabajoService.asignarTeletrabajo(idEmpleado, body.fecha_inicio, body.fecha_fin);
+  @UseGuards(AuthGuard)
+  asignarTeletrabajo(
+    @Param('idEmpleado') idEmpleado: number,
+    @Body() body: { fecha_inicio: string, fecha_fin: string },
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user?.sub;
+    return this.teletrabajoService.asignarTeletrabajo(idEmpleado, body.fecha_inicio, body.fecha_fin, idUsuario, ip, userAgent);
   }
 
   @Get('tiene/:runEmpleado')
@@ -25,20 +34,30 @@ export class TeletrabajoController {
   }
 
   @Put('editarTeletrabajo/:idEmpleado/:id/:horarioId')
+  @UseGuards(AuthGuard)
   editarTeletrabajo(
     @Param('idEmpleado') idEmpleado: number,
     @Param('id') id: number,
     @Param('horarioId') horarioId: number,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
-    return this.teletrabajoService.editarTeletrabajo(idEmpleado, id, horarioId);
+    const idUsuario = req.user?.sub;
+    return this.teletrabajoService.editarTeletrabajo(idEmpleado, id, horarioId, idUsuario, ip, userAgent);
   }
 
   @Delete('eliminarTeletrabajo/:idEmpleado/:id')
+  @UseGuards(AuthGuard)
   eliminarTeletrabajo(
     @Param('idEmpleado') idEmpleado: number,
     @Param('id') id: number,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
   ) {
-    return this.teletrabajoService.eliminarTeletrabajo(idEmpleado, id);
+    const idUsuario = req.user?.sub;
+    return this.teletrabajoService.eliminarTeletrabajo(idEmpleado, id, idUsuario, ip, userAgent);
   }
 
   @Get("obtenerTeleEmpleado/:idEmpleado")

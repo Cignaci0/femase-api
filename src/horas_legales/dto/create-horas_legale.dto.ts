@@ -1,1 +1,3 @@
-export class CreateHorasLegaleDto {}
+export class CreateHorasLegaleDto {
+    hora: number;
+}

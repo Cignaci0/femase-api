@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { RegistroConexionesService } from './registro_conexiones.service';
 import { CreateRegistroConexioneDto } from './dto/create-registro_conexione.dto';
 import { UpdateRegistroConexioneDto } from './dto/update-registro_conexione.dto';
@@ -13,8 +13,16 @@ export class RegistroConexionesController {
   }
 
   @Get()
-  findAll() {
-    return this.registroConexionesService.findAll();
+  findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('idEmpresa') idEmpresa?: string,
+  ) {
+    return this.registroConexionesService.findAll(
+      Number(page),
+      Number(limit),
+      idEmpresa ? Number(idEmpresa) : undefined
+    );
   }
 
   @Get(':id')

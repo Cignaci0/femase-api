@@ -1,15 +1,23 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Ip, Headers } from '@nestjs/common';
 import { ProveedorCorreoService } from './proveedor-correo.service';
 import { CreateProveedorCorreoDto } from './dto/create-proveedor-correo.dto';
 import { UpdateProveedorCorreoDto } from './dto/update-proveedor-correo.dto';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('proveedor-correo')
+@UseGuards(AuthGuard)
 export class ProveedorCorreoController {
   constructor(private readonly proveedorCorreoService: ProveedorCorreoService) {}
 
   @Post("crear")
-  create(@Body() createProveedorCorreoDto: CreateProveedorCorreoDto) {
-    return this.proveedorCorreoService.create(createProveedorCorreoDto);
+  create(
+    @Body() createProveedorCorreoDto: CreateProveedorCorreoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.proveedorCorreoService.create(createProveedorCorreoDto, idUsuario, ip, userAgent);
   }
 
   @Get()
@@ -23,9 +31,16 @@ export class ProveedorCorreoController {
   }
 
   @Patch('actualizar/:id')
-  update(@Param('id') id: string, @Body() updateProveedorCorreoDto: UpdateProveedorCorreoDto) {
-    const proveedorCorreoActualizado = this.proveedorCorreoService.update(+id, updateProveedorCorreoDto);
-    return { mensaje: "proveedor correo actualizado con exito ", data: proveedorCorreoActualizado };
+  async update(
+    @Param('id') id: string, 
+    @Body() updateProveedorCorreoDto: UpdateProveedorCorreoDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    const proveedorCorreoActualizado = await this.proveedorCorreoService.update(+id, updateProveedorCorreoDto, idUsuario, ip, userAgent);
+    return { mensaje: "Proveedor de correo actualizado con éxito", data: proveedorCorreoActualizado };
   }
 
   @Delete(':id')

@@ -8,6 +8,8 @@ import { MailerService } from '@nestjs-modules/mailer';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { NotFoundError } from 'rxjs';
 import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class FirmasService {
@@ -17,7 +19,7 @@ export class FirmasService {
     private readonly mailerService: MailerService,
   ) { }
 
-  async create(createFirmaDto: CreateFirmaDto) {
+  async create(createFirmaDto: CreateFirmaDto, idUsuario?: number, ip?: string, userAgent?: string) {
     const firma = this.firmaRepository.create({
       nombre: createFirmaDto.nombre,
       tipo: createFirmaDto.tipo,
@@ -63,7 +65,48 @@ export class FirmasService {
     } catch (error) {
       console.error("Error enviando email:", error.message);
     }
-    return await this.firmaRepository.save(firma);
+    const guardada = await this.firmaRepository.save(firma);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.firmaRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.firmaRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.firmaRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado una solicitud de firma: "${createFirmaDto.nombre}" para el empleado "${empleado.nombres} ${empleado.apellido_paterno}".`,
+          tipo_evento: 'Creación Firma',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.firmaRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardada;
   }
 
   async findAll(empresa_id: number, usuario_id: number) {
@@ -91,7 +134,7 @@ export class FirmasService {
     return `This action returns a #${id} firma`;
   }
 
-  async aprovarRechazarFirma(idFirma: number, updateFirmaDto: UpdateFirmaDto, usuario_id: number, pin: number) {
+  async aprovarRechazarFirma(idFirma: number, updateFirmaDto: UpdateFirmaDto, usuario_id: number, pin: number, idUsuario?: number, ip?: string, userAgent?: string) {
     const firma = await this.firmaRepository.findOne({ 
       where: { id: idFirma },
       relations: ['usuario', 'empleado'] 
@@ -168,7 +211,52 @@ export class FirmasService {
       motivo: updateFirmaDto.motivo
     });
 
-    return await this.firmaRepository.findOneBy({ id: idFirma });
+    const firmaFinal = await this.firmaRepository.findOneBy({ id: idFirma });
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.firmaRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.firmaRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        let estadoTexto = '';
+        if (updateFirmaDto.estado === 'A') estadoTexto = 'Aprobada';
+        if (updateFirmaDto.estado === 'R') estadoTexto = 'Rechazada';
+
+        const registroEvento = this.firmaRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma: "${firma.nombre}" del empleado "${firma.empleado?.nombres} ${firma.empleado?.apellido_paterno}". Estado: ${estadoTexto}.`,
+          tipo_evento: 'Resolución Firma',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.firmaRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return firmaFinal;
   }
 
   remove(id: number) {

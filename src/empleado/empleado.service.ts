@@ -7,6 +7,8 @@ import { ILike, In, Not, Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import * as bcrypt from 'bcrypt';
 import { Cenco } from 'src/cencos/cenco.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+const UAParser = require('ua-parser-js');
 
 @Injectable()
 export class EmpleadoService {
@@ -17,7 +19,12 @@ export class EmpleadoService {
     private userRepository: Repository<User>,
   ) { }
 
-  async create(createEmpleadoDto: Empleado) {
+  async create(
+    createEmpleadoDto: Empleado,
+    idUsuario: number,
+    ip: string,
+    userAgent: string
+  ) {
     // Primero creo el empleado
     const nuevoEmpleado = this.empleadoRepository.create(createEmpleadoDto);
     if (nuevoEmpleado.email || nuevoEmpleado.email_laboral || nuevoEmpleado.email_noti) {
@@ -76,6 +83,45 @@ export class EmpleadoService {
 
     const guardarNuevoUser = await this.userRepository.save(nuevoUser);
     if (!guardarNuevoUser) throw new HttpException('Error al crear el usuario', 400);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.empleadoRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent);
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado el empleado "${guardarNuevoEmpleado.nombres} ${guardarNuevoEmpleado.apellido_paterno} ${guardarNuevoEmpleado.apellido_materno}" para la empresa "${empleadoCreado.empresa?.nombre_empresa || 'Desconocida'}"`,
+          tipo_evento: 'Creación de Empleado',
+          ip: ip,
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.empleadoRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
 
     return {
       message: 'Empleado creado correctamente y asociado a un usuario!'
@@ -140,16 +186,27 @@ export class EmpleadoService {
     };
   }
 
-  async update(id: number, updateEmpleadoDto: UpdateEmpleadoDto | any): Promise<any> {
+  async update(
+    id: number, 
+    updateEmpleadoDto: UpdateEmpleadoDto | any, 
+    idUsuario: number, 
+    ip: string, 
+    userAgent: string
+  ): Promise<any> {
     const dtoTransformado = { ...updateEmpleadoDto };
-    const empleado = await this.empleadoRepository.preload({
-      empleado_id: id,
-      ...dtoTransformado,
+    
+    // 1. Buscamos el empleado cargando la relación empresa
+    const empleado = await this.empleadoRepository.findOne({
+      where: { empleado_id: id },
+      relations: ['empresa']
     });
 
     if (!empleado) {
       throw new NotFoundException(`El empleado con ID ${id} no existe`);
     }
+
+    // Mezclamos los datos
+    this.empleadoRepository.merge(empleado, dtoTransformado);
 
     if (updateEmpleadoDto.email) {
       const existeEmail = await this.empleadoRepository.findOne({
@@ -171,7 +228,6 @@ export class EmpleadoService {
       if (existeEmailLaboral) throw new ConflictException('Ya existe el email laboral');
     }
 
-
     try {
       // 1. Guardar cambios en empleado
       const actualizada = await this.empleadoRepository.save(empleado);
@@ -179,7 +235,7 @@ export class EmpleadoService {
       // 2. Traer empleado actualizado con su nuevo cenco
       const empGuardado = await this.empleadoRepository.findOne({
         where: { empleado_id: actualizada.empleado_id },
-        relations: ['cenco']
+        relations: ['cenco', 'empresa']
       });
 
       if (empGuardado) {
@@ -196,8 +252,47 @@ export class EmpleadoService {
         }
       }
 
+      // --- AUDITORÍA ---
+      if (idUsuario && !isNaN(idUsuario)) {
+        const autor = await this.empleadoRepository.manager.findOne(User, {
+          where: { usuario_id: idUsuario },
+          relations: ['empleado', 'empresa']
+        });
+
+        if (autor) {
+          let empleadoAutor: Empleado | null = null;
+          if (autor?.empleado?.empleado_id) {
+            empleadoAutor = await this.empleadoRepository.manager.findOne(Empleado, {
+              where: { empleado_id: autor.empleado.empleado_id },
+              relations: ['empresa', 'cenco', 'cenco.departamento']
+            });
+          }
+
+          const parser = new UAParser(userAgent);
+          const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+          const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+            usuario: autor?.username,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del empleado "${actualizada.nombres} ${actualizada.apellido_paterno} ${actualizada.apellido_materno || ''}" perteneciente a la empresa "${empGuardado?.empresa?.nombre_empresa || 'Desconocida'}"`,
+            tipo_evento: 'Edición de Empleado',
+            ip: ip,
+            fecha: new Date(),
+            hora: new Date().toTimeString().split(' ')[0],
+            sistema_operativo: parser.getOS().name || 'Desconocido',
+            browser: navegador,
+            empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+            depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+            cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+            rut: autor?.run_usuario
+          });
+
+          await this.empleadoRepository.manager.save(registroEvento);
+        }
+      }
+      // -----------------
+
       return {
-        mensaje: 'Empleado actualizado con exito y cenco de usuario sincronizado',
+        mensaje: 'Empleado actualizado con éxito y cenco de usuario sincronizado',
         id: actualizada.empleado_id
       };
     } catch (error) {
@@ -272,21 +367,104 @@ export class EmpleadoService {
     return empleados;
   }
 
-  async cambiarPinFirma(idUser: number, pinActual: number, pinFirma: number) {
+  async cambiarPinFirma(
+    idUser: number, 
+    pinActual: number, 
+    pinFirma: number, 
+    ip: string, 
+    userAgent: string
+  ) {
     const usuario = await this.userRepository.findOne({
       where: { usuario_id: idUser },
-      relations: ['empleado']
+      relations: ['empleado', 'empresa', 'empleado.empresa', 'empleado.cenco', 'empleado.cenco.departamento']
     });
+    
     if (!usuario) throw new NotFoundException(`El usuario con ID ${idUser} no existe`)
+    
+    if (!usuario.empleado) {
+      throw new BadRequestException('El usuario no tiene una ficha de empleado asociada para cambiar el PIN');
+    }
+
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: usuario.empleado.empleado_id },
+      relations: ['empresa', 'cenco', 'cenco.departamento']
     });
-    if (!empleado) throw new NotFoundException(`El empleado con ID ${idUser} no existe`)
+
+    if (!empleado) throw new NotFoundException(`El empleado asociado al usuario no existe`)
     if (empleado.pin_firma !== pinActual) throw new BadRequestException('El pin actual es incorrecto')
+    
     empleado.pin_firma = pinFirma;
     await this.empleadoRepository.save(empleado);
+
+    // --- AUDITORÍA ---
+    const parser = new UAParser(userAgent);
+    const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+    const registroEvento = this.empleadoRepository.manager.create(RegistroEvento, {
+      usuario: usuario.username,
+      evento: `El usuario ${usuario.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'} ha cambiado su PIN de firma electrónica`,
+      tipo_evento: 'Cambio PIN Firma',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: parser.getOS().name || 'Desconocido',
+      browser: navegador,
+      empresa: empleado?.empresa?.nombre_empresa || usuario?.empresa?.nombre_empresa,
+      depto: empleado?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleado?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: usuario.run_usuario
+    });
+
+    await this.empleadoRepository.manager.save(registroEvento);
+    // -----------------
+
     return {
       message: 'Pin de firma cambiado correctamente'
+    }
+  }
+
+  async cambiarNoti(idUsuario: number, noti30Entrada?: boolean, noti30Salida?: boolean) {
+    const usuario = await this.userRepository.findOne({
+      where: { usuario_id: idUsuario },
+      relations: ['empleado']
+    })
+    if (!usuario) {
+      throw new NotFoundException(`El usuario con ID ${idUsuario} no existe`)
+    }
+    const empleado = await this.empleadoRepository.findOne({
+      where: { empleado_id: usuario.empleado.empleado_id }
+    })
+    if (!empleado) {
+      throw new NotFoundException(`El empleado con ID ${idUsuario} no existe`)
+    }
+    if (noti30Entrada !== undefined) {
+      empleado.noti_30_entrada = noti30Entrada;
+    }
+    if (noti30Salida !== undefined) {
+      empleado.noti_30_salida = noti30Salida;
+    }
+    await this.empleadoRepository.save(empleado);
+    return {
+      message: 'Notificaciones cambiadas correctamente'
+    }
+  }
+  async obtenerNoti(idUsuario: number) {
+    const usuario = await this.userRepository.findOne({
+      where: { usuario_id: idUsuario },
+      relations: ['empleado']
+    })
+    if (!usuario) {
+      throw new NotFoundException(`El usuario con ID ${idUsuario} no existe`)
+    }
+    const empleado = await this.empleadoRepository.findOne({
+      where: { empleado_id: usuario.empleado.empleado_id }
+    })
+    if (!empleado) {
+      throw new NotFoundException(`El empleado con ID ${idUsuario} no existe`)
+    }
+    return {
+      noti_30_entrada: empleado.noti_30_entrada,
+      noti_30_salida: empleado.noti_30_salida
     }
   }
 

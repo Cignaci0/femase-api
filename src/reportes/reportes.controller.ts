@@ -1,8 +1,10 @@
-import { Controller, Get, Query, Res, HttpException } from '@nestjs/common';
+import { Controller, Get, Query, Res, HttpException, Req, Ip, Headers, UseGuards } from '@nestjs/common';
 import { ReportesService } from './reportes.service';
 import type { Response } from 'express';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('reportes')
+@UseGuards(AuthGuard)
 export class ReportesController {
   constructor(private readonly reportesService: ReportesService) { }
 
@@ -11,6 +13,9 @@ export class ReportesController {
     @Query('numFicha') numFicha: string,
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha || !fechaInicio || !fechaFin) {
@@ -18,7 +23,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generateAttendancePdf(numFicha, fechaInicio, fechaFin);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generateAttendancePdf(numFicha, fechaInicio, fechaFin, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="asistencia_${numFicha}.pdf"`,
@@ -35,6 +41,9 @@ export class ReportesController {
     @Query('numFicha') numFicha: string,
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha || !fechaInicio || !fechaFin) {
@@ -42,7 +51,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generateSimpleAttendancePdf(numFicha, fechaInicio, fechaFin);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generateSimpleAttendancePdf(numFicha, fechaInicio, fechaFin, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="asistencia_simple_${numFicha}.pdf"`,
@@ -57,6 +67,9 @@ export class ReportesController {
   @Get('vacaciones/pdf')
   async generateVacacionesReport(
     @Query('numFicha') numFicha: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha) {
@@ -64,7 +77,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generarReporteVacaciones(numFicha);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generarReporteVacaciones(numFicha, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="vacaciones_${numFicha}.pdf"`,
@@ -81,6 +95,9 @@ export class ReportesController {
     @Query('numFicha') numFicha: string,
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha) {
@@ -88,7 +105,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generarReporteAusencias(numFicha, fechaInicio, fechaFin);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generarReporteAusencias(numFicha, fechaInicio, fechaFin, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="ausencias_${numFicha}.pdf"`,
@@ -105,6 +123,9 @@ export class ReportesController {
     @Query('numFicha') numFicha: string,
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha || !fechaInicio || !fechaFin) {
@@ -112,7 +133,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generateDomFestPdf(numFicha, fechaInicio, fechaFin);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generateDomFestPdf(numFicha, fechaInicio, fechaFin, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="domingos_festivos_${numFicha}.pdf"`,
@@ -129,6 +151,9 @@ export class ReportesController {
     @Query('numFicha') numFicha: string,
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!numFicha || !fechaInicio || !fechaFin) {
@@ -136,7 +161,8 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generateAuditTurnoPdf(fechaInicio, fechaFin, numFicha);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generateAuditTurnoPdf(fechaInicio, fechaFin, numFicha, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="auditoria_turnos_${numFicha}.pdf"`,
@@ -151,6 +177,9 @@ export class ReportesController {
   @Get('marcaciones-diarias/pdf')
   async generateDailyMarkingsReport(
     @Query('fecha') fecha: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
     @Res() res: Response
   ) {
     if (!fecha) {
@@ -158,10 +187,48 @@ export class ReportesController {
     }
 
     try {
-      const pdfBuffer = await this.reportesService.generateDailyMarkingsPdf(fecha);
+      const idUsuario = req.user?.sub;
+      const pdfBuffer = await this.reportesService.generateDailyMarkingsPdf(fecha, idUsuario, ip, userAgent);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="marcaciones_diarias_${fecha}.pdf"`,
+        'Content-Length': pdfBuffer.length,
+      });
+      res.end(pdfBuffer);
+    } catch (error) {
+      throw new HttpException('Error generando reporte: ' + error.message, 500);
+    }
+  }
+
+  @Get('conexiones/pdf')
+  async generateConexionesReport(
+    @Res() res: Response,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+    @Query('idEmpresa') idEmpresa?: number,
+    @Query('idUsuario') idUsuarioFiltro?: number
+  ) {
+    if (!fechaInicio || !fechaFin) {
+      throw new HttpException('Faltan parámetros requeridos: fechaInicio, fechaFin', 400);
+    }
+
+    try {
+      const idUsuarioAuditoria = req.user?.sub;
+      const pdfBuffer = await this.reportesService.reporteConexiones(
+        fechaInicio, 
+        fechaFin, 
+        idEmpresa ? Number(idEmpresa) : undefined, 
+        idUsuarioFiltro ? Number(idUsuarioFiltro) : undefined,
+        idUsuarioAuditoria, 
+        ip, 
+        userAgent
+      );
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="registro_conexiones_${fechaInicio}_${fechaFin}.pdf"`,
         'Content-Length': pdfBuffer.length,
       });
       res.end(pdfBuffer);

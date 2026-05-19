@@ -7,9 +7,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 
+import { SesionActivaService } from 'src/sesion-activa/sesion-activa.service';
+
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private sesionActivaService: SesionActivaService
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -18,9 +23,18 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException();
     }
     try {
-      const payload = await this.jwtService.verifyAsync(token);
+      const payload = await this.jwtService.verifyAsync(token, {
+        secret: 'secret' // ensuring the secret is explicitly checked
+      });
       request['user'] = payload;
-    } catch {
+    } catch (error) {
+      console.log('Error verifying token:', error.message);
+      if (error.name === 'TokenExpiredError') {
+        const decoded = this.jwtService.decode(token) as any;
+        if (decoded && decoded.sub) {
+          await this.sesionActivaService.eliminarSesion(decoded.sub).catch(e => console.error("Error eliminando sesión expirada:", e));
+        }
+      }
       throw new UnauthorizedException();
     }
     return true;
