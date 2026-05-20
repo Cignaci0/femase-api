@@ -18,4 +18,16 @@ export class DiasCompensacion {
 
     @Column({ default: "00:00:00" })
     horas_descontadas: string
+
+    @Column({ type: 'varchar', nullable: true })
+    estado: string | null;
+
+    @Column({ type: 'varchar', nullable: true, default: '00:00:00' })
+    horas_solicitadas: string | null;
+
+    @Column({ type: 'date', nullable: true })
+    fecha_inicio_descanso: string | null;
+
+    @Column({ type: 'date', nullable: true })
+    fecha_fin_descanso: string | null;
 }

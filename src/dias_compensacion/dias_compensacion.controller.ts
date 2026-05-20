@@ -17,6 +17,11 @@ export class DiasCompensacionController {
     return this.diasCompensacionService.findAll(+idUsuario);
   }
 
+  @Get('/pendiente/:empleado_id')
+  buscarPendientesPorEmpleado(@Param('empleado_id') empleado_id: string) {
+    return this.diasCompensacionService.buscarPendientesPorEmpleado(+empleado_id);
+  }
+  
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.diasCompensacionService.findOne(+id);
