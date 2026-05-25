@@ -1187,6 +1187,7 @@ export class MarcasService {
       });
       const alertasMap = new Map<number, Set<number>>();
       for (const alerta of alertasHoy) {
+        if (!alerta.empleado) continue;
         const empId = alerta.empleado.empleado_id;
         if (!alertasMap.has(empId)) alertasMap.set(empId, new Set());
         alertasMap.get(empId)!.add(alerta.tipo);
