@@ -20,8 +20,9 @@ export class AutorizaHorasExtrasController {
   async findAll(@Query("numFicha") numFicha?: string, @Query("fechaInicio") fechaInicio?: string, @Query("fechaFin") fechaFin?: string) {
     if (numFicha && fechaInicio && fechaFin) {
       await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
+      return this.autorizaHorasExtrasService.findAll(numFicha, new Date(fechaInicio), new Date(fechaFin));
     }
-    return this.autorizaHorasExtrasService.findAll();
+    return [];
   }
 
   @Get(':id')

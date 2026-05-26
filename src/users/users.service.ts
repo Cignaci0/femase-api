@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, HttpException, Injectable, InternalServerErrorException, NotFoundException, Param, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity';
-import { In, LessThan, Like, Repository } from 'typeorm';
+import { In, LessThan, Like, Repository, MoreThanOrEqual } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as bcrypt from 'bcrypt';
@@ -12,6 +12,7 @@ import { Cron } from '@nestjs/schedule';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
+import { Alerta } from 'src/alertas/entities/alerta.entity';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -517,7 +518,7 @@ export class UsersService {
     })
   }
 
-  async obtenerUserporEmpresa(idEmpresa:number){
+  async obtenerUserporEmpresa(idEmpresa: number) {
     return this.usersRepository.find({
       where: {
         empresa: {
@@ -527,4 +528,81 @@ export class UsersService {
       relations: ['empresa']
     })
   }
+
+  @Cron('0 14 * * *') // Se ejecuta todos los días a las 2:00 PM (14:00)
+  async alertaSugerircambioContra() {
+    const ahora = new Date();
+    const tresMesesAtras = new Date();
+    tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
+
+    // Obtener todos los usuarios activos
+    const usuarios = await this.usersRepository.find({
+      where: {
+        estado: { estado_id: 1 } // Activo
+      },
+      relations: ['empleado', 'estado', 'empresa']
+    });
+
+    for (const usuario of usuarios) {
+      // Si el usuario no tiene correo electrónico, no podemos enviarle nada
+      if (!usuario.email && (!usuario.empleado || !usuario.empleado.email_laboral)) {
+        continue;
+      }
+
+      try {
+        let alertaExistente: Alerta | null = null;
+        const emailDestino = usuario.empleado?.email_laboral || usuario.email;
+
+        if (usuario.empleado) {
+          // Verificar si ya existe una alerta de recomendación (tipo 11) en los últimos 3 meses para el empleado
+          alertaExistente = await this.usersRepository.manager.findOne(Alerta, {
+            where: {
+              empleado: { empleado_id: usuario.empleado.empleado_id },
+              tipo: 11,
+              fecha: MoreThanOrEqual(tresMesesAtras)
+            }
+          });
+        } else {
+          // Si no tiene empleado, verificamos si existe una alerta en los últimos 3 meses para el usuario
+          alertaExistente = await this.usersRepository.manager.findOne(Alerta, {
+            where: {
+              usuario: { usuario_id: usuario.usuario_id },
+              tipo: 11,
+              fecha: MoreThanOrEqual(tresMesesAtras)
+            }
+          });
+        }
+
+        if (!alertaExistente && emailDestino) {
+          // Enviar el correo electrónico
+          await this.mailerService.sendMail({
+            to: emailDestino,
+            subject: 'Sugerencia de seguridad: Cambiar contraseña',
+            html: `
+              <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+                <h2>Hola, ${usuario.nombres}</h2>
+                <p><strong>Se recomienda cambiar su contraseña por seguridad.</strong></p>
+                <p>Para su seguridad, es recomendable cambiar periódicamente sus credenciales de acceso al sistema.</p>
+                <p>Por favor, ingrese al sistema para realizar esta actualización.</p>
+              </div>
+            `,
+          });
+
+          // Registrar la alerta en la base de datos
+          const nuevaAlerta = this.usersRepository.manager.create(Alerta, {
+            tipo: 11,
+            usuario: { usuario_id: usuario.usuario_id } as User,
+            empleado: usuario.empleado ? ({ empleado_id: usuario.empleado.empleado_id } as Empleado) : null,
+            fecha: ahora
+          });
+
+          await this.usersRepository.manager.save(nuevaAlerta);
+        }
+      } catch (error) {
+        console.error(`Error al procesar alerta de cambio de contraseña para el usuario ${usuario.usuario_id}:`, error);
+      }
+    }
+  }
+
+
 }
