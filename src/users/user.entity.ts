@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude } from 'class-transformer';
+import { Alerta } from 'src/alertas/entities/alerta.entity';
 import { Cenco } from 'src/cencos/cenco.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
@@ -100,4 +101,7 @@ export class User {
 
   @OneToMany(() => Solicitude, (solicitude) => solicitude.usuario)
   solicitudes: Solicitude[];
+
+  @OneToMany(() => Alerta, (alerta) => alerta.usuario)
+  alertas: Alerta[];
 }

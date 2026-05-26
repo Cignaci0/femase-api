@@ -81,6 +81,10 @@ import { DocumentoModule } from './documento/documento.module';
 import { FirmasModule } from './firmas/firmas.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { RegistroConexionesModule } from './registro_conexiones/registro_conexiones.module';
+import { DiasCompensacionModule } from './dias_compensacion/dias_compensacion.module';
+import { DiasCompensacion } from './dias_compensacion/entities/dias_compensacion.entity';
+import { DiasCompensacionAprobadasModule } from './dias_compensacion_aprobadas/dias_compensacion_aprobadas.module';
+import { DiasCompensacionAprobada } from './dias_compensacion_aprobadas/entities/dias_compensacion_aprobada.entity';
 
 @Module({
   imports: [
@@ -132,7 +136,9 @@ import { RegistroConexionesModule } from './registro_conexiones/registro_conexio
         Firma,
         Solicitude,
         RegistroConexione,
-        RegistroEvento
+        RegistroEvento,
+        DiasCompensacion,
+        DiasCompensacionAprobada
       ]
     }),
     MailerModule.forRoot({
@@ -190,7 +196,8 @@ import { RegistroConexionesModule } from './registro_conexiones/registro_conexio
     DocumentoModule,
     FirmasModule,
     SolicitudesModule,
-    RegistroConexionesModule
+    RegistroConexionesModule,
+    DiasCompensacionModule
   ],
   providers: [PerfilesService],
   controllers: [PerfilesController],
