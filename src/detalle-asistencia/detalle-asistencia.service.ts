@@ -8,6 +8,7 @@ import { MarcasService } from '../marcas/marcas.service';
 import { Empleado } from '../empleado/entities/empleado.entity';
 import { Feriado } from '../feriados/entities/feriado.entity';
 import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
+import { Marca } from '../marcas/entities/marca.entity';
 
 @Injectable()
 export class DetalleAsistenciaService {
@@ -122,6 +123,39 @@ export class DetalleAsistenciaService {
       if (reg.marcasDia && reg.marcasDia.length > 0) {
         reg.marcasDia.sort((a: any, b: any) => String(a.hora_marca).localeCompare(String(b.hora_marca)));
 
+        const validMarcas: any[] = [];
+        for (const m of reg.marcasDia) {
+          if (!m.id_marca) {
+            validMarcas.push(m);
+            continue;
+          }
+
+          if (validMarcas.length === 0) {
+            validMarcas.push(m);
+          } else {
+            let lastValid = validMarcas[validMarcas.length - 1];
+            for (let i = validMarcas.length - 1; i >= 0; i--) {
+              if (validMarcas[i].id_marca) {
+                lastValid = validMarcas[i];
+                break;
+              }
+            }
+
+            if (!lastValid || !lastValid.id_marca) {
+              validMarcas.push(m);
+              continue;
+            }
+
+            const diff = diffMsStr(String(lastValid.hora_marca), String(m.hora_marca));
+            if (diff >= 0 && diff <= 180000) {
+              await this.detalleAsistenciaRepository.manager.delete(Marca, { id_marca: m.id_marca });
+            } else {
+              validMarcas.push(m);
+            }
+          }
+        }
+        reg.marcasDia = validMarcas;
+
         if (reg.marcasDia.length === 1) {
           const m = reg.marcasDia[0];
           if (m.evento === 2) {
@@ -129,7 +163,7 @@ export class DetalleAsistenciaService {
           } else {
             reg.entrada = String(m.hora_marca);
           }
-        } else {
+        } else if (reg.marcasDia.length > 1) {
           reg.entrada = String(reg.marcasDia[0].hora_marca);
           reg.salida = String(reg.marcasDia[reg.marcasDia.length - 1].hora_marca);
         }

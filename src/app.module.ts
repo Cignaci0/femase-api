@@ -58,35 +58,28 @@ import { Documento } from './documento/entities/documento.entity';
 import { Firma } from './firmas/entities/firma.entity';
 import { Solicitude } from './solicitudes/entities/solicitude.entity';
 import { RegistroConexione } from './registro_conexiones/entities/registro_conexione.entity';
-
+import { ScheduleModule } from '@nestjs/schedule';
+import { RegistroEvento } from './registro_evento/entities/registro_evento.entity';
+import { HorasLegale } from './horas_legales/entities/horas_legale.entity';
+import { AuditoriaTurno } from './detalle-turno/entities/auditoria-turno.entity';
+import { Teletrabajo } from './teletrabajo/entities/teletrabajo.entity';
+import { Alerta } from './alertas/entities/alerta.entity';
+import { DetalleAsistencia } from './detalle-asistencia/entities/detalle-asistencia.entity';
+import { AutorizaHorasExtra } from './autoriza_horas_extras/entities/autoriza_horas_extra.entity';
+import { Ausencia } from './ausencias/entities/ausencia.entity';
+import { Vacaciones } from './vacaciones/entities/vacaciones.entity';
 import { ReportesModule } from './reportes/reportes.module';
 import { VacacionesModule } from './vacaciones/vacaciones.module';
-import { Vacaciones } from './vacaciones/entities/vacaciones.entity';
 import { AusenciasModule } from './ausencias/ausencias.module';
-import { Ausencia } from './ausencias/entities/ausencia.entity';
 import { AutorizaHorasExtrasModule } from './autoriza_horas_extras/autoriza_horas_extras.module';
-import { AutorizaHorasExtra } from './autoriza_horas_extras/entities/autoriza_horas_extra.entity';
 import { RegistroEventoModule } from './registro_evento/registro_evento.module';
-import { RegistroEvento } from './registro_evento/entities/registro_evento.entity';
 import { DetalleAsistenciaModule } from './detalle-asistencia/detalle-asistencia.module';
-import { DetalleAsistencia } from './detalle-asistencia/entities/detalle-asistencia.entity';
-import { ScheduleModule } from '@nestjs/schedule';
 import { AlertasModule } from './alertas/alertas.module';
-import { Alerta } from './alertas/entities/alerta.entity';
 import { TeletrabajoModule } from './teletrabajo/teletrabajo.module';
-import { Teletrabajo } from './teletrabajo/entities/teletrabajo.entity';
-import { AuditoriaTurno } from './detalle-turno/entities/auditoria-turno.entity';
 import { HorasLegalesModule } from './horas_legales/horas_legales.module';
-import { HorasLegale } from './horas_legales/entities/horas_legale.entity';
-import { EmpleadoModule } from './empleado/empleado.module';
-import { Empleado } from './empleado/entities/empleado.entity';
-import { Documento } from './documento/entities/documento.entity';
 import { DocumentoModule } from './documento/documento.module';
-import { Firma } from './firmas/entities/firma.entity';
 import { FirmasModule } from './firmas/firmas.module';
-import { Solicitude } from './solicitudes/entities/solicitude.entity';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
-import { RegistroConexione } from './registro_conexiones/entities/registro_conexione.entity';
 import { RegistroConexionesModule } from './registro_conexiones/registro_conexiones.module';
 
 @Module({
@@ -98,8 +91,8 @@ import { RegistroConexionesModule } from './registro_conexiones/registro_conexio
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'superadmin',
-      database: 'femase',
+      password: 'Admin',
+      database: 'postgres',
       synchronize: false,
       entities: [
         User,

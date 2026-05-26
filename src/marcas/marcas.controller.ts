@@ -13,14 +13,13 @@ export class MarcasController {
   ) { }
 
   @Post()
-  @UseGuards(AuthGuard)
   create(
     @Body() createMarcaDto: CreateMarcaDto,
-    @Req() req: any,
-    @Ip() ip: string,
-    @Headers('user-agent') userAgent: string
+    @Req() req?: any,
+    @Ip() ip?: string,
+    @Headers('user-agent') userAgent?: string
   ) {
-    const idUsuario = req.user.sub;
+    const idUsuario = req?.user?.sub;
     return this.marcasService.create(createMarcaDto, idUsuario, ip, userAgent);
   }
 
