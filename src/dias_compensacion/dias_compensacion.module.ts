@@ -7,10 +7,11 @@ import { User } from 'src/users/user.entity';
 import { AutorizaHorasExtra } from 'src/autoriza_horas_extras/entities/autoriza_horas_extra.entity';
 import { Alerta } from 'src/alertas/entities/alerta.entity';
 import { DiasCompensacionAprobada } from 'src/dias_compensacion_aprobadas/entities/dias_compensacion_aprobada.entity';
+import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DiasCompensacion, User, AutorizaHorasExtra, Alerta, DiasCompensacionAprobada])
+    TypeOrmModule.forFeature([DiasCompensacion, User, AutorizaHorasExtra, Alerta, DiasCompensacionAprobada, Ausencia])
   ],
   controllers: [DiasCompensacionController],
   providers: [DiasCompensacionService],

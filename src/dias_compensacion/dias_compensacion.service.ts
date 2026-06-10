@@ -11,7 +11,7 @@ import { MailerService } from '@nestjs-modules/mailer';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Alerta } from 'src/alertas/entities/alerta.entity';
 import { DiasCompensacionAprobada } from 'src/dias_compensacion_aprobadas/entities/dias_compensacion_aprobada.entity';
-
+import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
 
 const parseTimeToDecimalHours = (timeStr?: string | null): number => {
   if (!timeStr) return 0;
@@ -71,6 +71,8 @@ export class DiasCompensacionService implements OnModuleInit {
     private readonly alertaRepository: Repository<Alerta>,
     @InjectRepository(DiasCompensacionAprobada)
     private readonly diasCompensacionAprobadasRepository: Repository<DiasCompensacionAprobada>,
+    @InjectRepository(Ausencia)
+    private readonly ausenciaRepository: Repository<Ausencia>,
     private readonly mailerService: MailerService
   ) { }
 
@@ -308,6 +310,22 @@ export class DiasCompensacionService implements OnModuleInit {
           fecha_fin_descanso: record.fecha_fin_descanso
         });
         await this.diasCompensacionAprobadasRepository.save(aprobada);
+
+        // --- CREAR LA AUSENCIA AUTOMÁTICAMENTE ---
+        const nuevaAusencia = this.ausenciaRepository.create({
+          num_ficha: record.empleado,
+          fecha_inicio: new Date(record.fecha_inicio_descanso as string),
+          fecha_fin: new Date(record.fecha_fin_descanso as string),
+          hora_inicio: '08:00',
+          hora_fin: '18:00',
+          dia_completo: true,
+          tipo_ausencia: { id: 5 } as any, // ID de Compensación HHEE/Feriado
+          autorizador: 'Sistema Compensación HHEE',
+          autorizada: true,
+          fecha_creacion: new Date()
+        });
+        await this.ausenciaRepository.save(nuevaAusencia);
+        // -----------------------------------------
       }
       
       // El estado de la solicitud y las horas solicitadas vuelven a su estado base
