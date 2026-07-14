@@ -7,6 +7,7 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { Multer } from 'multer';
 
 @Controller('empresas')
 @UseGuards(AuthGuard)
@@ -69,7 +70,7 @@ export class EmpresasController {
   }))
   async uploadLogo(
     @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @Req() req: any,
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string

@@ -267,8 +267,53 @@ export class AutorizaHorasExtrasService {
     return `This action returns a #${id} autorizaHorasExtra`;
   }
 
-  update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
-    return this.autorizaHorasExtrasRepository.update(id, updateAutorizaHorasExtraDto);
+  async update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
+    const { multiplicador, horas_extras: horasEnviadas, ...restDto } = updateAutorizaHorasExtraDto;
+
+    // Si se está aprobando y viene un multiplicador desde el frontend
+    if (restDto.estado === 'A' && multiplicador) {
+      let baseHoras = horasEnviadas;
+
+      // Si el supervisor no envió horas recortadas, buscamos las originales ("crudas") en la base de datos
+      if (!baseHoras) {
+        const registro = await this.autorizaHorasExtrasRepository.findOne({ where: { id } });
+        if (registro && registro.horas_extras) {
+          baseHoras = registro.horas_extras;
+        }
+      }
+      
+      if (baseHoras) {
+        // Convertimos el "HH:MM:SS" base a formato decimal
+        const parts = baseHoras.split(':').map(Number);
+        const hours = parts[0] || 0;
+        const minutes = parts[1] || 0;
+        const seconds = parts[2] || 0;
+        const decimalHours = hours + (minutes / 60) + (seconds / 3600);
+
+        // Aplicamos el multiplicador (ej: 1.5 o 2) a las horas base elegidas
+        const multipliedHours = decimalHours * multiplicador;
+
+        // Volvemos a formatear a "HH:MM:SS"
+        const absoluteHours = Math.floor(multipliedHours);
+        const finalMinutes = Math.floor((multipliedHours - absoluteHours) * 60);
+        const finalSeconds = Math.round(((multipliedHours - absoluteHours) * 60 - finalMinutes) * 60);
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        
+        // Adjuntamos las horas ya multiplicadas al objeto que se va a guardar
+        (restDto as any).horas_extras = `${pad(absoluteHours)}:${pad(finalMinutes)}:${pad(finalSeconds)}`;
+      }
+    } else if (horasEnviadas) {
+      // Si no están aprobando con multiplicador pero de todas formas mandan horas_extras, se las guardamos
+      (restDto as any).horas_extras = horasEnviadas;
+    }
+
+    if (restDto.estado === 'A') {
+      (restDto as any).observacion = 'Horas extras autorizadas';
+    } else if (restDto.estado === 'R') {
+      (restDto as any).observacion = 'Horas extras denegadas';
+    }
+
+    return this.autorizaHorasExtrasRepository.update(id, restDto as any);
   }
 
   remove(id: number) {
@@ -276,7 +321,7 @@ export class AutorizaHorasExtrasService {
   }
 
   // Cron que se ejecuta cada hora para procesar el día anterior
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('* * * * *')
   async handleCron() {
     this.logger.log('Iniciando procesamiento automático de horas extras...');
 
