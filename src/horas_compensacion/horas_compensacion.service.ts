@@ -30,7 +30,7 @@ export class HorasCompensacionService {
     private empleadoRepo: Repository<Empleado>,
     @InjectRepository(HorasCompensacion)
     private horasCompensacionRepo: Repository<HorasCompensacion>,
-  ) {}
+  ) { }
 
   create(createHorasCompensacionDto: CreateHorasCompensacionDto) {
     return 'This action adds a new horasCompensacion';
@@ -71,7 +71,7 @@ export class HorasCompensacionService {
 
     // 4. Si todo está bien, restamos de pagas y sumamos a compensación
     const compensacionActualDec = timeToDecimal(banco.horas_compensacion);
-    
+
     banco.horas_pagas = decimalToTime(pagasDec - transferDec);
     banco.horas_compensacion = decimalToTime(compensacionActualDec + transferDec);
 
@@ -133,7 +133,7 @@ export class HorasCompensacionService {
       const emp = await this.horasCompensacionRepo.manager.findOne(Empleado, { where: { run: user.run_usuario } });
       if (emp) empleadoId = emp.empleado_id;
     }
-    
+
     if (!empleadoId) {
       throw new BadRequestException(`El usuario ${usuarioId} no tiene un empleado asociado o no se pudo encontrar.`);
     }
