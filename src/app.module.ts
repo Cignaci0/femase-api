@@ -81,10 +81,10 @@ import { DocumentoModule } from './documento/documento.module';
 import { FirmasModule } from './firmas/firmas.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { RegistroConexionesModule } from './registro_conexiones/registro_conexiones.module';
-import { DiasCompensacionModule } from './dias_compensacion/dias_compensacion.module';
-import { DiasCompensacion } from './dias_compensacion/entities/dias_compensacion.entity';
-import { DiasCompensacionAprobadasModule } from './dias_compensacion_aprobadas/dias_compensacion_aprobadas.module';
-import { DiasCompensacionAprobada } from './dias_compensacion_aprobadas/entities/dias_compensacion_aprobada.entity';
+import { HorasCompensacionModule } from './horas_compensacion/horas_compensacion.module';
+import { HorasCompensacion } from './horas_compensacion/entities/horas_compensacion.entity';
+import { SolicitudHorasCompensacionModule } from './solicitud_horas_compensacion/solicitud_horas_compensacion.module';
+import { SolicitudHorasCompensacion } from './solicitud_horas_compensacion/entities/solicitud_horas_compensacion.entity';
 
 @Module({
   imports: [
@@ -137,8 +137,8 @@ import { DiasCompensacionAprobada } from './dias_compensacion_aprobadas/entities
         Solicitude,
         RegistroConexione,
         RegistroEvento,
-        DiasCompensacion,
-        DiasCompensacionAprobada
+        HorasCompensacion,
+        SolicitudHorasCompensacion
       ]
     }),
     MailerModule.forRoot({
@@ -197,7 +197,8 @@ import { DiasCompensacionAprobada } from './dias_compensacion_aprobadas/entities
     FirmasModule,
     SolicitudesModule,
     RegistroConexionesModule,
-    DiasCompensacionModule
+    HorasCompensacionModule,
+    SolicitudHorasCompensacionModule
   ],
   providers: [PerfilesService],
   controllers: [PerfilesController],
