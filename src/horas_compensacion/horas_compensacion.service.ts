@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CreateHorasCompensacionDto } from './dto/create-horas_compensacion.dto';
 import { UpdateHorasCompensacionDto } from './dto/update-horas_compensacion.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,6 +6,8 @@ import { User } from 'src/users/user.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Repository, In } from 'typeorm';
 import { HorasCompensacion } from './entities/horas_compensacion.entity';
+import { MailerService } from '@nestjs-modules/mailer';
+import { Cron } from '@nestjs/schedule';
 
 const timeToDecimal = (timeStr?: string): number => {
   if (!timeStr) return 0;
@@ -25,11 +27,14 @@ const decimalToTime = (decimalHours: number): string => {
 
 @Injectable()
 export class HorasCompensacionService {
+  private readonly logger = new Logger(HorasCompensacionService.name);
+
   constructor(
     @InjectRepository(Empleado)
     private empleadoRepo: Repository<Empleado>,
     @InjectRepository(HorasCompensacion)
     private horasCompensacionRepo: Repository<HorasCompensacion>,
+    private readonly mailerService: MailerService,
   ) { }
 
   create(createHorasCompensacionDto: CreateHorasCompensacionDto) {
@@ -201,6 +206,148 @@ export class HorasCompensacionService {
     if (faltanteDec > 0.01) {
       throw new BadRequestException(`Inconsistencia: El empleado no tiene suficientes horas. Faltan ${faltanteDec.toFixed(2)} horas.`);
     }
+  }
+
+  // Cron que se ejecuta todos los días a las 2:00 AM para verificar vencimientos
+  @Cron('* * * * *')
+  async verificarVencimientos() {
+    this.logger.log('Iniciando cron para verificar vencimientos de horas de compensación...');
+    const hoy = new Date();
+    
+    const registros = await this.horasCompensacionRepo.find({
+      relations: ['empleado', 'empleado.empresa'],
+    });
+
+    this.logger.log(`Se encontraron ${registros.length} registros totales para evaluar.`);
+
+    for (const reg of registros) {
+      if (!reg.empleado) continue;
+
+      const disponibleDec = Math.max(0, timeToDecimal(reg.horas_compensacion) - timeToDecimal(reg.horas_compensacion_consumidas));
+
+      if (disponibleDec <= 0) continue;
+
+      const cierreMes = reg.empleado.empresa?.cierre_mes || 31;
+      const expirationDate = this.getExpirationDate(reg.periodo, cierreMes);
+
+      const diffInTime = expirationDate.getTime() - hoy.getTime();
+      const diffInDays = diffInTime / (1000 * 3600 * 24);
+
+      if (diffInDays <= 30 && diffInDays > 0 && !reg.notificado_vencimiento) {
+        try {
+          const emailEmpleado = reg.empleado.email_laboral || reg.empleado.email;
+          const emailNoti = reg.empleado.email_noti;
+          const nombreCompleto = `${reg.empleado.nombres} ${reg.empleado.apellido_paterno}`;
+          const horasDisponiblesStr = decimalToTime(disponibleDec);
+
+          // 1. Correo al empleado
+          if (emailEmpleado) {
+            this.logger.log(`Enviando advertencia de vencimiento a ${emailEmpleado} (Empleado) por el periodo ${reg.periodo}.`);
+            await this.mailerService.sendMail({
+              to: emailEmpleado,
+              subject: 'Aviso de Vencimiento de Horas de Compensación',
+              html: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                  <p>Hola <strong>${nombreCompleto}</strong>,</p>
+                  <p>Le informamos que posee <strong>${horasDisponiblesStr}</strong> horas de compensación correspondientes al periodo <strong>${reg.periodo}</strong> que no se han utilizado.</p>
+                  <p>Si estas no se utilizan dentro de los siguientes 30 días, pasarán automáticamente a pago.</p>
+                </div>
+              `
+            });
+          } else {
+            this.logger.warn(`El empleado ${reg.empleado.empleado_id} no tiene un correo personal/laboral configurado para la notificación.`);
+          }
+
+          // 2. Correo a Gerencia / RRHH
+          if (emailNoti) {
+            this.logger.log(`Enviando advertencia de vencimiento a ${emailNoti} (Gerencia/RRHH) por el periodo ${reg.periodo}.`);
+            await this.mailerService.sendMail({
+              to: emailNoti,
+              subject: 'Notificación de Vencimiento Próximo de Horas - ' + nombreCompleto,
+              html: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                  <p>Se notifica que el colaborador <strong>${nombreCompleto}</strong> posee <strong>${horasDisponiblesStr}</strong> horas de compensación del periodo <strong>${reg.periodo}</strong> sin utilizar.</p>
+                  <p>Si el colaborador no utiliza estas horas dentro de los próximos 30 días, estas pasarán automáticamente a pago en su liquidación.</p>
+                </div>
+              `
+            });
+          }
+
+          reg.notificado_vencimiento = true;
+          await this.horasCompensacionRepo.save(reg);
+          this.logger.log(`Registro de periodo ${reg.periodo} del empleado ${reg.empleado.empleado_id} marcado como notificado.`);
+        } catch (error) {
+          this.logger.error(`Error al enviar correo de notificación al empleado ${reg.empleado.empleado_id}: ${error.message}`);
+        }
+      }
+
+      if (hoy >= expirationDate && !reg.procesado_pago_vencido) {
+        try {
+          this.logger.log(`Las horas de compensación del periodo ${reg.periodo} para el empleado ${reg.empleado.empleado_id} han vencido. Procesando traspaso a pago al periodo actual...`);
+          
+          // 1. Calcular el periodo actual basándose en cierreMes
+          const dateActual = new Date(hoy);
+          if (dateActual.getDate() > cierreMes) {
+            dateActual.setMonth(dateActual.getMonth() + 1);
+          }
+          const periodoActualStr = `${dateActual.getFullYear()}-${String(dateActual.getMonth() + 1).padStart(2, '0')}`;
+
+          // 2. Buscar o crear el registro de horas de compensación para el periodo actual
+          let regActual = await this.horasCompensacionRepo.findOne({
+            where: {
+              empleado: { empleado_id: reg.empleado.empleado_id },
+              periodo: periodoActualStr
+            }
+          });
+
+          if (!regActual) {
+            regActual = this.horasCompensacionRepo.create({
+              empleado: reg.empleado,
+              periodo: periodoActualStr,
+              horas_extras: '00:00:00',
+              horas_pagas: decimalToTime(disponibleDec),
+              horas_compensacion: '00:00:00',
+              horas_compensacion_consumidas: '00:00:00'
+            });
+          } else {
+            const pagasActualDec = timeToDecimal(regActual.horas_pagas);
+            regActual.horas_pagas = decimalToTime(pagasActualDec + disponibleDec);
+          }
+
+          // 3. Modificar el registro antiguo para restar las horas traspasadas de su balance de compensación
+          const compensacionAntiguaDec = timeToDecimal(reg.horas_compensacion);
+          reg.horas_compensacion = decimalToTime(compensacionAntiguaDec - disponibleDec);
+          reg.procesado_pago_vencido = true;
+
+          // Guardamos ambos registros
+          await this.horasCompensacionRepo.save(reg);
+          await this.horasCompensacionRepo.save(regActual);
+
+          this.logger.log(`Traspaso completado con éxito. Se movieron ${decimalToTime(disponibleDec)} horas al periodo actual (${periodoActualStr}) para su pago.`);
+        } catch (error) {
+          this.logger.error(`Error al procesar el vencimiento y traspaso a pago del registro ${reg.id}: ${error.message}`);
+        }
+      }
+    }
+
+    this.logger.log('Finalizado cron de verificación de vencimientos.');
+  }
+
+  private getExpirationDate(periodo: string, cierreMes: number): Date {
+    const [yearStr, monthStr] = periodo.split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr); 
+
+    const targetDate = new Date(year, month - 1 + 5, 1);
+    const expYear = targetDate.getFullYear();
+    const expMonth = targetDate.getMonth(); 
+
+    const daysInMonth = new Date(expYear, expMonth + 1, 0).getDate();
+    const closingDay = Math.min(cierreMes, daysInMonth);
+
+    const expirationDate = new Date(expYear, expMonth, closingDay + 1);
+    expirationDate.setHours(0, 0, 0, 0);
+    return expirationDate;
   }
 
   findAll() {

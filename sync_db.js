@@ -31,6 +31,13 @@ async function syncDb() {
   } catch(e) { console.log(e.message); }
 
   try {
+    // Add new columns to horas_compensacion
+    await client.query(`ALTER TABLE db_fmc.horas_compensacion ADD COLUMN IF NOT EXISTS notificado_vencimiento boolean DEFAULT false;`);
+    await client.query(`ALTER TABLE db_fmc.horas_compensacion ADD COLUMN IF NOT EXISTS procesado_pago_vencido boolean DEFAULT false;`);
+    console.log("Added notification and payment columns to horas_compensacion");
+  } catch(e) { console.log(e.message); }
+
+  try {
     // 2. Create solicitud_horas_compensacion
     await client.query(`
       CREATE TABLE IF NOT EXISTS db_fmc.solicitud_horas_compensacion (

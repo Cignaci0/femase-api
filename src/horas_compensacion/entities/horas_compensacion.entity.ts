@@ -24,4 +24,10 @@ export class HorasCompensacion {
     
     @Column({ type: 'varchar', default: '00:00:00' })
     horas_compensacion_consumidas: string;
+
+    @Column({ type: 'boolean', default: false, name: 'notificado_vencimiento' })
+    notificado_vencimiento: boolean;
+
+    @Column({ type: 'boolean', default: false, name: 'procesado_pago_vencido' })
+    procesado_pago_vencido: boolean;
 }
