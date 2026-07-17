@@ -117,12 +117,14 @@ export class AutorizaHorasExtrasService {
     // 3. OBTENER HORARIO TEÓRICO (Para saber si es turno nocturno)
     let horaEntradaTeorica: string | null = null;
     let horaSalidaTeorica: string | null = null;
+    let colacionTeoricaStr: string | null = null;
 
     const turnoNormal = empleado.turno?.detalle_turno?.find(t => t.dia?.cod_dia === diaEnNumero)
     
     if (turnoNormal) {
       horaEntradaTeorica = turnoNormal.horario.hora_entrada;
       horaSalidaTeorica = turnoNormal.horario.hora_salida;
+      colacionTeoricaStr = turnoNormal.horario.colacion;
     } else if (empleado.turno === null && empleado.permite_rotativo === true) {
       const turnoRotativo = await this.asignacionTurnoRotativoRepository.findOne({
         where: {
@@ -134,6 +136,7 @@ export class AutorizaHorasExtrasService {
       if (turnoRotativo) {
         horaEntradaTeorica = turnoRotativo.horario.hora_entrada;
         horaSalidaTeorica = turnoRotativo.horario.hora_salida;
+        colacionTeoricaStr = turnoRotativo.horario.colacion;
       }
     }
 
@@ -143,10 +146,14 @@ export class AutorizaHorasExtrasService {
 
     const realEntradaTeorica = parseTime(horaEntradaTeorica);
     const realSalidaTeorica = parseTime(horaSalidaTeorica);
+    const colacionDec = colacionTeoricaStr ? parseTime(colacionTeoricaStr) : 0;
     
     // Si sale a una hora menor a la que entró (ej 06:00 < 22:00), es nocturno
     const esTurnoNocturno = realSalidaTeorica < realEntradaTeorica;
-    const horaTeorica = esTurnoNocturno ? (24 - realEntradaTeorica + realSalidaTeorica) : (realSalidaTeorica - realEntradaTeorica);
+    
+    // Calculamos las horas brutas y le restamos la colación teórica del turno
+    const horasBrutas = esTurnoNocturno ? (24 - realEntradaTeorica + realSalidaTeorica) : (realSalidaTeorica - realEntradaTeorica);
+    const horaTeorica = horasBrutas - colacionDec;
 
     // 4. DEFINIR VENTANA DE BÚSQUEDA DE MARCAS
     const fechaInicioBusqueda = new Date(fechaInicioDia);
@@ -394,7 +401,7 @@ export class AutorizaHorasExtrasService {
   }
 
   // Cron que se ejecuta cada hora para procesar el día anterior
-  @Cron('* * * * *')
+  @Cron('0 * * * *')
   async handleCron() {
     this.logger.log('Iniciando procesamiento automático de horas extras...');
 

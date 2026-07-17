@@ -209,7 +209,7 @@ export class HorasCompensacionService {
   }
 
   // Cron que se ejecuta todos los días a las 2:00 AM para verificar vencimientos
-  @Cron('* * * * *')
+  @Cron('0 2 * * *')
   async verificarVencimientos() {
     this.logger.log('Iniciando cron para verificar vencimientos de horas de compensación...');
     const hoy = new Date();
