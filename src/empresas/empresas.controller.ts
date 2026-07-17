@@ -85,4 +85,21 @@ export class EmpresasController {
     const filePath = join(__dirname, '../../imgEmpresas', filename);
     return res.sendFile(filePath);
   }
+
+  @Get("cierreMes/:id")
+  async obtenerCierreMes(@Param("id") id: string) {
+    return this.empresaService.obtenerCierreMes(+id);
+  }
+
+  @Patch('cierreMes/:id/:cierreMes')
+  actualizarCierreMesEmpresa(
+    @Param('id') id: string,
+    @Param('cierreMes') cierreMes: string,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    const idUsuario = req.user.sub;
+    return this.empresaService.actualizarCierreMes(+id, +cierreMes, idUsuario, ip, userAgent);
+  }
 }

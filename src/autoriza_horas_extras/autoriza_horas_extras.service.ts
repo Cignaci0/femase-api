@@ -331,14 +331,28 @@ export class AutorizaHorasExtrasService {
       // --- NUEVA LÓGICA: BANCO DE HORAS ---
       const registroOriginal = await this.autorizaHorasExtrasRepository.findOne({ 
         where: { id }, 
-        relations: ['empleado'] 
+        relations: ['empleado', 'empleado.empresa'] 
       });
 
       if (registroOriginal && registroOriginal.empleado) {
         const fecha = new Date(registroOriginal.fecha_marca);
-        const anio = fecha.getFullYear();
-        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-        const periodoStr = `${anio}-${mes}`;
+        let anio = fecha.getFullYear();
+        let mes = fecha.getMonth() + 1; // 1 a 12
+        const dia = fecha.getDate();
+
+        // Obtenemos el cierre_mes de la empresa (por defecto 31 si no está configurado)
+        const cierreMes = registroOriginal.empleado.empresa?.cierre_mes || 31;
+
+        // Si el día supera el cierre de mes, las horas caen al mes siguiente
+        if (dia > cierreMes) {
+          mes += 1;
+          if (mes > 12) {
+            mes = 1;
+            anio += 1;
+          }
+        }
+
+        const periodoStr = `${anio}-${String(mes).padStart(2, '0')}`;
 
         const horasAprobadas = (restDto as any).horas_extras || registroOriginal.horas_extras;
 

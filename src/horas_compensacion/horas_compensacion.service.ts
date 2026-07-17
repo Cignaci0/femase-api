@@ -79,11 +79,16 @@ export class HorasCompensacionService {
   }
 
   async obtenerSaldoDisponible(usuarioId: number): Promise<any> {
-    const user = await this.horasCompensacionRepo.manager.findOne(User, { where: { usuario_id: usuarioId }, relations: ['empleado'] });
+    const user = await this.horasCompensacionRepo.manager.findOne(User, { where: { usuario_id: usuarioId }, relations: ['empleado', 'empleado.empresa'] });
     let empleadoId = user?.empleado?.empleado_id;
+    let cierreMes = user?.empleado?.empresa?.cierre_mes || 31;
+
     if (!empleadoId && user?.run_usuario) {
-      const emp = await this.horasCompensacionRepo.manager.findOne(Empleado, { where: { run: user.run_usuario } });
-      if (emp) empleadoId = emp.empleado_id;
+      const emp = await this.horasCompensacionRepo.manager.findOne(Empleado, { where: { run: user.run_usuario }, relations: ['empresa'] });
+      if (emp) {
+        empleadoId = emp.empleado_id;
+        cierreMes = emp.empresa?.cierre_mes || 31;
+      }
     }
 
     if (!empleadoId) {
@@ -92,7 +97,13 @@ export class HorasCompensacionService {
 
     const periodosValidos: string[] = [];
     const date = new Date();
-    // Generamos los últimos 6 periodos (meses) incluyendo el actual
+    
+    // Si la fecha actual supera el cierre de mes, nos adelantamos un mes en el análisis
+    if (date.getDate() > cierreMes) {
+      date.setMonth(date.getMonth() + 1);
+    }
+
+    // Generamos los últimos 6 periodos (meses) incluyendo el actual desplazado
     for (let i = 0; i < 6; i++) {
       const anio = date.getFullYear();
       const mes = String(date.getMonth() + 1).padStart(2, '0');
@@ -145,8 +156,16 @@ export class HorasCompensacionService {
   }
 
   async consumirSaldo(empleadoId: number, horasAConsumir: string) {
+    const empleado = await this.horasCompensacionRepo.manager.findOne(Empleado, { where: { empleado_id: empleadoId }, relations: ['empresa'] });
+    const cierreMes = empleado?.empresa?.cierre_mes || 31;
+
     const periodosValidos: string[] = [];
     const date = new Date();
+
+    if (date.getDate() > cierreMes) {
+      date.setMonth(date.getMonth() + 1);
+    }
+
     for (let i = 0; i < 6; i++) {
       const anio = date.getFullYear();
       const mes = String(date.getMonth() + 1).padStart(2, '0');

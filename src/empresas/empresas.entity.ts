@@ -89,4 +89,7 @@ export class Empresa {
   @OneToMany(() => Firma, (firma) => firma.empresa)
   firmas: Firma[];
 
+  @Column()
+  cierre_mes:number;
+
 }
