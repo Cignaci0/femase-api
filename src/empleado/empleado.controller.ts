@@ -40,12 +40,14 @@ export class EmpleadoController {
     @Query('limit') limit: string,
     @Query('empresa_id') empresa_id?: string,
     @Query('estado_id') estado_id?: string,
+    @Query('search') search?: string,
   ) {
     return this.empleadoService.findAll(
       +page || 1,
       +limit || 10,
       (empresa_id && !isNaN(+empresa_id)) ? +empresa_id : undefined,
-      (estado_id && !isNaN(+estado_id)) ? +estado_id : undefined
+      (estado_id && !isNaN(+estado_id)) ? +estado_id : undefined,
+      search
     );
   }
 
