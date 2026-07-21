@@ -8,9 +8,10 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Marca } from 'src/marcas/entities/marca.entity';
 import { AsignacionTurnoRotativo } from 'src/asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { DetalleAsistenciaModule } from 'src/detalle-asistencia/detalle-asistencia.module';
+import { HorasCompensacion } from 'src/horas_compensacion/entities/horas_compensacion.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AutorizaHorasExtra, Cargo, Empleado, Marca, AsignacionTurnoRotativo]), DetalleAsistenciaModule],
+  imports: [TypeOrmModule.forFeature([AutorizaHorasExtra, Cargo, Empleado, Marca, AsignacionTurnoRotativo, HorasCompensacion]), DetalleAsistenciaModule],
   controllers: [AutorizaHorasExtrasController],
   providers: [AutorizaHorasExtrasService],
   exports:[AutorizaHorasExtrasService]
