@@ -8,6 +8,7 @@ import * as express from 'express';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use('/logos', express.static('C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas')); // CAMBIAR RUTA 
+  app.use('/utils', express.static(join(process.cwd(), 'utils')));
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors();
 
