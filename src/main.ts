@@ -10,14 +10,13 @@ async function bootstrap() {
   app.use('/logos', express.static('C:\\Users\\ADMINISTRATIVO\\Documents\\Proyectos\\API\\api-femase-fmc\\imgEmpresas')); // CAMBIAR RUTA 
   app.use('/utils', express.static(join(process.cwd(), 'utils')));
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  app.setGlobalPrefix('api');
   app.enableCors();
 
   const config = new DocumentBuilder()
     .setTitle('API FMC')
     .setDescription('Acá se visualizan los endpoints disponibles en la api')
     .setVersion('1.0')
-    // Add security features like Bearer Auth if needed
-    // .addBearerAuth() 
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

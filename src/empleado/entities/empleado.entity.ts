@@ -159,14 +159,20 @@ export class Empleado {
   @ApiProperty({ description: 'pin firma', example: 1234 })
   pin_firma: number;
 
-  @Column({default:true})
-  noti_30_entrada:boolean
+  @Column({ default: true })
+  noti_30_entrada: boolean
 
-  @Column({default:true})
-  noti_30_salida:boolean
+  @Column({ default: true })
+  noti_30_salida: boolean
 
   @Column({ nullable: true, default: false })
   @ApiProperty({ description: 'Indica si el empleado tiene turno flexible', example: true })
   tiene_turno_flexible: boolean;
 
+  @Column({ nullable: true })
+  @ApiProperty({ description: 'hora turno flexible', example: "01:00" })
+  hora_turno_flexible: string
+
+  @OneToMany(() => DiasCompensacion, (dias_compensacion) => dias_compensacion.empleado)
+  dias_compensacion: DiasCompensacion[];
 }

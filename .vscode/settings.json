@@ -1,4 +1,7 @@
 {
   "editor.fontFamily": "'Agave Nerd Font'",
-  "editor.fontSize": 12
+  "editor.fontSize": 12,
+  "editor.minimap.sectionHeaderFontSize": 9,
+  "screencastMode.fontSize": 56,
+  "scm.inputFontSize": 13
 }
