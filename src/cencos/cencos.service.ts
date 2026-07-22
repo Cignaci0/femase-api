@@ -11,6 +11,7 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Departamento } from 'src/departamentos/departamento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -106,12 +107,15 @@ export class CencosService {
     // 1. Buscamos el cenco cargando relaciones para el log
     const cenco = await this.cencoRepository.findOne({
       where: { cenco_id: id },
-      relations: ['departamento', 'departamento.empresa']
+      relations: ['departamento', 'departamento.empresa', 'estado']
     });
 
     if (!cenco) {
       throw new NotFoundException(`El centro de costo con ID ${id} no existe`);
     }
+
+    const cencoAntiguo = cloneEntity(cenco);
+
     // 2. Mezclamos los datos nuevos
     this.cencoRepository.merge(cenco, updateDto);
 
@@ -142,9 +146,11 @@ export class CencosService {
           const browser = parser.getBrowser();
           const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
 
+          const textoCambios = generarTextoCambios(cencoAntiguo, updateDto);
+
           const registroEvento = this.cencoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del centro de costo "${actualizada.nombre_cenco}" del departamento "${actualizada.departamento?.nombre_departamento || 'Desconocido'}" de la empresa "${actualizada.departamento?.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del centro de costo "${actualizada.nombre_cenco}" del departamento "${actualizada.departamento?.nombre_departamento || 'Desconocido'}" de la empresa "${actualizada.departamento?.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición de Centro de Costo',
             ip: ip,
             fecha: new Date(),

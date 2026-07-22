@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -109,6 +110,8 @@ export class ProveedorCorreoService {
       throw new NotFoundException(`El proveedor de correo con ID ${id} no existe`);
     }
 
+    const proveedorAntiguo = cloneEntity(proveedor);
+
     // 2. Mezclamos los datos
     this.proveedorCorreoRepository.merge(proveedor, updateProveedorCorreoDto);
 
@@ -134,9 +137,11 @@ export class ProveedorCorreoService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(proveedorAntiguo, updateProveedorCorreoDto);
+
           const registroEvento = this.proveedorCorreoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del proveedor de correo "${actualizada.dominio}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del proveedor de correo "${actualizada.dominio}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición Proveedor Correo',
             ip: ip,
             fecha: new Date(),

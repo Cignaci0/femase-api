@@ -13,6 +13,7 @@ import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.ent
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
 import { Alerta } from 'src/alertas/entities/alerta.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -297,12 +298,14 @@ export class UsersService {
   async actualizarUsuario(idUsuario: number, id: number, updateDto: UpdateUsuarioDto, ip: string, userAgent: string): Promise<any> {
     const usuario = await this.usersRepository.findOne({
       where: { usuario_id: id },
-      relations: ['empresa']
+      relations: ['empresa', 'estado']
     });
 
     if (!usuario) {
       throw new NotFoundException(`El usuario con ID ${id} no existe`);
     }
+
+    const usuarioAntiguo = cloneEntity(usuario);
 
     this.usersRepository.merge(usuario, updateDto);
 
@@ -329,10 +332,12 @@ export class UsersService {
       const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
       const sistemaOperativo = os.name || 'Desconocido';
 
+      const textoCambios = generarTextoCambios(usuarioAntiguo, updateDto);
+
       //Crear Registro de evento
       const registroEvento = this.usersRepository.manager.create(RegistroEvento, {
         usuario: usuarioCreador?.username,
-        evento: `El usuario ${usuarioCreador?.username} perteneciente a la empresa ${usuarioCreador?.empresa?.nombre_empresa} ha editado al usuario ${actualizada.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'}`,
+        evento: `El usuario ${usuarioCreador?.username} perteneciente a la empresa ${usuarioCreador?.empresa?.nombre_empresa} ha editado al usuario ${actualizada.username} de la empresa ${usuario.empresa?.nombre_empresa || 'Sin Empresa'}. ${textoCambios}`,
         tipo_evento: 'Edición',
         ip: ip,
         fecha: new Date(),

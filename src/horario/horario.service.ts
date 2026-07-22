@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -120,6 +121,8 @@ export class HorarioService {
       throw new NotFoundException(`El horario con ID ${id} no existe`);
     }
 
+    const horarioAntiguo = cloneEntity(horario);
+
     // 2. Mezclamos los datos
     this.horarioRepository.merge(horario, updateHorarioDto);
 
@@ -145,9 +148,11 @@ export class HorarioService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(horarioAntiguo, updateHorarioDto);
+
           const registroEvento = this.horarioRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del horario "${actualizada.hora_entrada} - ${actualizada.hora_salida}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del horario "${actualizada.hora_entrada} - ${actualizada.hora_salida}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición de Horario',
             ip: ip,
             fecha: new Date(),

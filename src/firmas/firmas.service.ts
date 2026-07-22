@@ -9,6 +9,7 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { NotFoundError } from 'rxjs';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -144,6 +145,8 @@ export class FirmasService {
       throw new NotFoundException("Firma no encontrada");
     }
 
+    const firmaAntigua = cloneEntity(firma);
+
     const usuario = await this.firmaRepository.manager.findOne(User, {
       where: { usuario_id: usuario_id },
       relations: ['empleado']
@@ -236,9 +239,11 @@ export class FirmasService {
         if (updateFirmaDto.estado === 'A') estadoTexto = 'Aprobada';
         if (updateFirmaDto.estado === 'R') estadoTexto = 'Rechazada';
 
+        const textoCambios = generarTextoCambios(firmaAntigua, { estado: updateFirmaDto.estado, motivo: updateFirmaDto.motivo });
+
         const registroEvento = this.firmaRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma: "${firma.nombre}" del empleado "${firma.empleado?.nombres} ${firma.empleado?.apellido_paterno}". Estado: ${estadoTexto}.`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma: "${firma.nombre}" del empleado "${firma.empleado?.nombres} ${firma.empleado?.apellido_paterno}". Estado: ${estadoTexto}. ${textoCambios}`,
           tipo_evento: 'Resolución Firma',
           ip: ip || 'Desconocida',
           fecha: new Date(),

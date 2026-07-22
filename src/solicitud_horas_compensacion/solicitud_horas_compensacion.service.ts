@@ -8,6 +8,9 @@ import { HorasCompensacionService } from 'src/horas_compensacion/horas_compensac
 import { Ausencia } from 'src/ausencias/entities/ausencia.entity';
 import { TipoAusencia } from 'src/tipo-ausencia/entities/tipo-ausencia.entity';
 import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
+const UAParser = require('ua-parser-js');
 
 const timeToDecimal = (timeStr?: string): number => {
   if (!timeStr) return 0;
@@ -26,7 +29,7 @@ export class SolicitudHorasCompensacionService {
     private asignacionTurnoRotativoRepo: Repository<AsignacionTurnoRotativo>,
     private horasCompensacionService: HorasCompensacionService,
   ) {}
-  async create(body: { usuarioId: number; fecha_solicitada: string; horas_solicitadas: string; hora_inicio?: string; hora_fin?: string; momento_jornada?: 'INICIO' | 'FIN' | 'DIA_COMPLETO'; observacion?: string }) {
+  async create(body: { usuarioId: number; fecha_solicitada: string; horas_solicitadas: string; hora_inicio?: string; hora_fin?: string; momento_jornada?: 'INICIO' | 'FIN' | 'DIA_COMPLETO'; observacion?: string }, idUsuario?: number, ip?: string, userAgent?: string) {
     let { usuarioId, fecha_solicitada, horas_solicitadas, hora_inicio, hora_fin, momento_jornada, observacion } = body;
 
     // Forzar momento_jornada si horas_solicitadas viene como DIA_COMPLETO
@@ -204,7 +207,48 @@ export class SolicitudHorasCompensacionService {
       observacion: observacion || 'Solicitud de tiempo libre compensado'
     });
 
-    return await this.solicitudRepo.save(nuevaSolicitud);
+    const guardada = await this.solicitudRepo.save(nuevaSolicitud);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.solicitudRepo.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.solicitudRepo.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.solicitudRepo.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha creado una solicitud de compensación de horas por ${horas_solicitadas} horas para el empleado "${empleado.nombres} ${empleado.apellido_paterno}".`,
+          tipo_evento: 'Creación Solicitud Compensación',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.solicitudRepo.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return guardada;
   }
 
   async buscarPendientes() {
@@ -251,7 +295,7 @@ export class SolicitudHorasCompensacionService {
     }));
   }
 
-  async aprobar(id: number, autorizador: string) {
+  async aprobar(id: number, autorizador: string, idUsuario?: number, ip?: string, userAgent?: string) {
     const solicitud = await this.solicitudRepo.findOne({
       where: { id },
       relations: ['empleado']
@@ -301,16 +345,95 @@ export class SolicitudHorasCompensacionService {
 
     await this.solicitudRepo.manager.save(nuevaAusencia);
 
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.solicitudRepo.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.solicitudRepo.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.solicitudRepo.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha APROBADO la solicitud de compensación de horas del empleado "${solicitud.empleado?.nombres} ${solicitud.empleado?.apellido_paterno}".`,
+          tipo_evento: 'Aprobación Solicitud Compensación',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.solicitudRepo.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
     return { mensaje: 'Solicitud aprobada y ausencia creada con éxito' };
   }
 
-  async rechazar(id: number) {
-    const solicitud = await this.solicitudRepo.findOne({ where: { id } });
+  async rechazar(id: number, idUsuario?: number, ip?: string, userAgent?: string) {
+    const solicitud = await this.solicitudRepo.findOne({ where: { id }, relations: ['empleado'] });
     if (!solicitud) throw new BadRequestException('Solicitud no encontrada');
     if (solicitud.estado !== 'P') throw new BadRequestException('Solo se pueden rechazar solicitudes pendientes');
 
     solicitud.estado = 'R';
     await this.solicitudRepo.save(solicitud);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.solicitudRepo.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.solicitudRepo.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const registroEvento = this.solicitudRepo.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha RECHAZADO la solicitud de compensación de horas del empleado "${solicitud.empleado?.nombres} ${solicitud.empleado?.apellido_paterno}".`,
+          tipo_evento: 'Rechazo Solicitud Compensación',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.solicitudRepo.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
     return { mensaje: 'Solicitud rechazada' };
   }
 }

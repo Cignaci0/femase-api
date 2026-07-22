@@ -8,6 +8,7 @@ import { SearchTipoDispositivoDto } from './dto/search-tipo-dispositivo.dto';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -118,13 +119,16 @@ export class TipoDispositivoService {
   ): Promise<any> {
     // 1. Buscamos el tipo de dispositivo
     const tipoDis = await this.tipoDispositivoRepository.findOne({
-      where: { tipo_dispositivo_id: id }
+      where: { tipo_dispositivo_id: id },
+      relations: ['estado']
     });
 
     // 2. Si no existe el ID, lanzamos 404
     if (!tipoDis) {
       throw new NotFoundException(`El tipo de dispositivo con ID ${id} no existe`);
     }
+
+    const tipoDisAntiguo = cloneEntity(tipoDis);
 
     // 3. Mezclamos los datos nuevos
     this.tipoDispositivoRepository.merge(tipoDis, updateTipoDispositivoDto);
@@ -152,9 +156,11 @@ export class TipoDispositivoService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(tipoDisAntiguo, updateTipoDispositivoDto);
+
           const registroEvento = this.tipoDispositivoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del tipo de dispositivo "${actualizada.nombre_tipo}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del tipo de dispositivo "${actualizada.nombre_tipo}". ${textoCambios}`,
             tipo_evento: 'Edición de Tipo Dispositivo',
             ip: ip,
             fecha: new Date(),

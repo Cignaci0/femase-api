@@ -9,6 +9,7 @@ import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.ent
 const UAParser = require('ua-parser-js');
 import { CreatePerfilDto } from './dto/create-perfil.dto';
 import { UpdatePerfilDto } from './dto/update-perfil.dto';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 
 @Injectable()
 export class PerfilesService {
@@ -87,12 +88,15 @@ export class PerfilesService {
 
   async actualizarPerfil(id: number, infoActualizar: UpdatePerfilDto, idUsuario: number, ip: string, userAgent: string): Promise<any> {
     const perfil = await this.perfilRepository.findOne({
-      where: { perfil_id: id }
+      where: { perfil_id: id },
+      relations: ['estado']
     });
 
     if (!perfil) {
       throw new NotFoundException(`El perfil con ID ${id} no existe`);
     }
+
+    const perfilAntiguo = cloneEntity(perfil);
 
     this.perfilRepository.merge(perfil, infoActualizar);
 
@@ -119,9 +123,11 @@ export class PerfilesService {
       const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
       const sistemaOperativo = os.name || 'Desconocido';
 
+      const textoCambios = generarTextoCambios(perfilAntiguo, infoActualizar);
+
       const registroEvento = this.perfilRepository.manager.create(RegistroEvento, {
         usuario: autor?.username,
-        evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha editado el perfil "${actualizada.nombre_perfil}"`,
+        evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha editado el perfil "${actualizada.nombre_perfil}". ${textoCambios}`,
         tipo_evento: 'Edición de Perfil',
         ip: ip,
         fecha: new Date(),

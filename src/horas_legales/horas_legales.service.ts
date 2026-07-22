@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -32,6 +33,11 @@ export class HorasLegalesService {
   }
 
   async update(id: number, updateHorasLegaleDto: UpdateHorasLegaleDto, idUsuario: number, ip: string, userAgent: string) {
+    const horasAntiguas = await this.horasRepository.findOne({ where: { id } });
+    if (!horasAntiguas) {
+      throw new NotFoundException(`Las horas legales con ID ${id} no existen`);
+    }
+
     // Separamos idUsuario de los datos de la base de datos para evitar errores de TypeORM
     const { idUsuario: _, ...datosAActualizar } = updateHorasLegaleDto;
     
@@ -57,9 +63,11 @@ export class HorasLegalesService {
         const browser = parser.getBrowser();
         const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
 
+        const textoCambios = generarTextoCambios(horasAntiguas, datosAActualizar);
+
         const registroEvento = this.horasRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} ha actualizado el horario legal a ${updateHorasLegaleDto.hora} horas.`,
+          evento: `El usuario ${autor?.username} ha actualizado el horario legal a ${updateHorasLegaleDto.hora} horas. ${textoCambios}`,
           tipo_evento: 'Actualización Horas Legales',
           ip: ip,
           fecha: new Date(),

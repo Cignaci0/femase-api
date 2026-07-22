@@ -9,6 +9,7 @@ import { Empresa } from 'src/empresas/empresas.entity';
 import { User } from 'src/users/user.entity';
 import { MailerService } from '@nestjs-modules/mailer';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -190,6 +191,8 @@ export class SolicitudesService {
       throw new Error(`Solicitud no encontrada`);
     }
 
+    const solicitudAntigua = cloneEntity(solicitud);
+
     const empleado = await this.solicitudRepository.manager.findOne(Empleado, {
       where: {
         empleado_id: solicitud.empleado?.empleado_id,
@@ -301,9 +304,11 @@ export class SolicitudesService {
         if (updateSolicitudeDto.estado === 'A') estadoTexto = 'Aprobado';
         if (updateSolicitudeDto.estado === 'R') estadoTexto = 'Rechazado';
 
+        const textoCambios = generarTextoCambios(solicitudAntigua, updateSolicitudeDto);
+
         const registroEvento = this.solicitudRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma del empleado "${solicitud.empleado?.nombres} ${solicitud.empleado?.apellido_paterno}". Estado: ${estadoTexto}.`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la solicitud de firma del empleado "${solicitud.empleado?.nombres} ${solicitud.empleado?.apellido_paterno}". Estado: ${estadoTexto}. ${textoCambios}`,
           tipo_evento: 'Resolución Solicitud Firma',
           ip: ip || 'Desconocida',
           fecha: new Date(),

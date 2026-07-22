@@ -9,6 +9,7 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Cenco } from 'src/cencos/cenco.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -97,12 +98,14 @@ export class DispositivoService {
     // 1. Buscamos el dispositivo cargando relaciones para el log
     const dispositivo = await this.dispositivoRepository.findOne({
       where: { dispositivo_id: id },
-      relations: ['cenco', 'cenco.departamento', 'cenco.departamento.empresa']
+      relations: ['cenco', 'cenco.departamento', 'cenco.departamento.empresa', 'estado']
     });
 
     if (!dispositivo) {
       throw new NotFoundException(`El dispositivo con ID ${id} no existe`);
     }
+
+    const dispositivoAntiguo = cloneEntity(dispositivo);
 
     // 2. Mezclamos los datos nuevos
     this.dispositivoRepository.merge(dispositivo, updateDispositivoDto);
@@ -129,9 +132,11 @@ export class DispositivoService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(dispositivoAntiguo, updateDispositivoDto);
+
           const registroEvento = this.dispositivoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del dispositivo con ID "${actualizada.dispositivo_id}" nombre: "${actualizada.nombre}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del dispositivo con ID "${actualizada.dispositivo_id}" nombre: "${actualizada.nombre}". ${textoCambios}`,
             tipo_evento: 'Edición de Dispositivo',
             ip: ip,
             fecha: new Date(),

@@ -9,6 +9,7 @@ import { AuthGuard } from 'src/auth/auth.guard';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -146,13 +147,15 @@ export class CargosService {
     // 1. Buscamos el cargo cargando su relación con la empresa
     const cargo = await this.cargoRepository.findOne({
       where: { cargo_id: id },
-      relations: ['empresa']
+      relations: ['empresa', 'estado']
     });
 
     // 2. Si no existe el ID, lanzamos 404
     if (!cargo) {
       throw new NotFoundException(`El cargo con ID ${id} no existe`);
     }
+
+    const cargoAntiguo = cloneEntity(cargo);
 
     // 3. Mezclamos los datos nuevos
     this.cargoRepository.merge(cargo, updateCargoDto);
@@ -180,9 +183,11 @@ export class CargosService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(cargoAntiguo, updateCargoDto);
+
           const registroEvento = this.cargoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del cargo "${actualizada.nombre}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del cargo "${actualizada.nombre}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición de Cargo',
             ip: ip,
             fecha: new Date(),

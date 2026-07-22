@@ -8,6 +8,7 @@ import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Estado } from 'src/estado/estado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -95,6 +96,8 @@ export class TipoAusenciaService {
       throw new HttpException('Tipo de ausencia no encontrado', 404);
     }
 
+    const tipoAusenciaAntiguo = cloneEntity(tipoAusencia);
+
     const { estado_id, ...resto } = updateTipoAusenciaDto;
     this.tipoAusenciaRepository.merge(tipoAusencia, {
       ...resto,
@@ -122,9 +125,11 @@ export class TipoAusenciaService {
         const parser = new UAParser(userAgent);
         const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+        const textoCambios = generarTextoCambios(tipoAusenciaAntiguo, updateTipoAusenciaDto);
+
         const registroEvento = this.tipoAusenciaRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el tipo de ausencia "${actualizado.nombre}"`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el tipo de ausencia "${actualizado.nombre}". ${textoCambios}`,
           tipo_evento: 'Edición Tipo de Ausencia',
           ip: ip,
           fecha: new Date(),

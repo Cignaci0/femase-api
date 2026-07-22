@@ -7,6 +7,7 @@ import { Between, Repository } from 'typeorm';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -113,6 +114,8 @@ export class AusenciasService {
       }
     }
 
+    const ausenciaAntigua = cloneEntity(ausencia);
+
     // 3. Mezclamos los datos
     // Usamos 'as any' para evitar el error de tipado entre el string del DTO y el objeto Empleado de la entidad
     this.ausenciaRepository.merge(ausencia, updateAusenciaDto as any);
@@ -153,9 +156,11 @@ export class AusenciasService {
         const inicioFormateado = new Date(actualizada.fecha_inicio).toLocaleDateString('es-ES', opcionesFecha);
         const finFormateado = new Date(actualizada.fecha_fin).toLocaleDateString('es-ES', opcionesFecha);
 
+        const textoCambios = generarTextoCambios(ausenciaAntigua, updateAusenciaDto);
+
         const registroEvento = this.ausenciaRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado la ausencia (${inicioFormateado} al ${finFormateado}) del empleado "${empleadoDestino?.nombres || ''} ${empleadoDestino?.apellido_paterno || ''}" perteneciente a la empresa "${empleadoDestino?.empresa?.nombre_empresa || 'Desconocida'}"`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado la ausencia (${inicioFormateado} al ${finFormateado}) del empleado "${empleadoDestino?.nombres || ''} ${empleadoDestino?.apellido_paterno || ''}" perteneciente a la empresa "${empleadoDestino?.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
           tipo_evento: 'Edición de Ausencia',
           ip: ip,
           fecha: new Date(),

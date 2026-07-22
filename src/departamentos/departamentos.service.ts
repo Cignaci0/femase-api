@@ -8,6 +8,7 @@ import { User } from 'src/users/user.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empresa } from 'src/empresas/empresas.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 import { SearchDeptoDto } from './dto/search-depto.dto';
 
@@ -142,13 +143,15 @@ export class DepartamentosService {
     // 1. Buscamos el departamento cargando su relación con la empresa para el log
     const departamento = await this.departamentoRepository.findOne({
       where: { departamento_id: id },
-      relations: ['empresa']
+      relations: ['empresa', 'estado']
     });
 
     // 2. Si no existe el ID, lanzamos 404
     if (!departamento) {
       throw new NotFoundException(`El departamento con ID ${id} no existe`);
     }
+
+    const departamentoAntiguo = cloneEntity(departamento);
 
     // 3. Mezclamos los datos nuevos
     this.departamentoRepository.merge(departamento, updateDto);
@@ -177,9 +180,11 @@ export class DepartamentosService {
           const browser = parser.getBrowser();
           const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
 
+          const textoCambios = generarTextoCambios(departamentoAntiguo, updateDto);
+
           const registroEvento = this.departamentoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del departamento "${actualizada.nombre_departamento}" de la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del departamento "${actualizada.nombre_departamento}" de la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición de Departamento',
             ip: ip,
             fecha: new Date(),

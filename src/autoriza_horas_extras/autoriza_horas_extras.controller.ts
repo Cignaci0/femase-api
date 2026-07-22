@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Ip, Headers } from '@nestjs/common';
 import { AutorizaHorasExtrasService } from './autoriza_horas_extras.service';
 import { DetalleAsistenciaService } from 'src/detalle-asistencia/detalle-asistencia.service';
 import { CreateAutorizaHorasExtraDto } from './dto/create-autoriza_horas_extra.dto';
@@ -31,8 +31,14 @@ export class AutorizaHorasExtrasController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
-    return this.autorizaHorasExtrasService.update(+id, updateAutorizaHorasExtraDto);
+  update(
+    @Param('id') id: string, 
+    @Body() updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto,
+    @Req() req: any,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string
+  ) {
+    return this.autorizaHorasExtrasService.update(+id, updateAutorizaHorasExtraDto, req?.user?.sub, ip, userAgent);
   }
 
   @Delete(':id')

@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -85,11 +86,14 @@ export class TipoMarcasService {
     const tipoMarca = await this.tipoMarcasRepository.findOne({
       where: {
         tipo_marca_id: id
-      }
+      },
+      relations: ['estado']
     });
     if (!tipoMarca) {
       throw new HttpException('Tipo de marca no encontrado', 404);
     }
+
+    const tipoMarcaAntiguo = cloneEntity(tipoMarca);
 
     this.tipoMarcasRepository.merge(tipoMarca, updateTipoMarcaDto as any);
     const actualizado = await this.tipoMarcasRepository.save(tipoMarca);
@@ -113,9 +117,11 @@ export class TipoMarcasService {
         const parser = new UAParser(userAgent);
         const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+        const textoCambios = generarTextoCambios(tipoMarcaAntiguo, updateTipoMarcaDto);
+
         const registroEvento = this.tipoMarcasRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el tipo de marca "${actualizado.nombre}"`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el tipo de marca "${actualizado.nombre}". ${textoCambios}`,
           tipo_evento: 'Edición Tipo de Marca',
           ip: ip,
           fecha: new Date(),

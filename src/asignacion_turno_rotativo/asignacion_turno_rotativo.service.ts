@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -169,6 +170,8 @@ export class AsignacionTurnoRotativoService {
       );
     }
     
+    const existeAntiguo = cloneEntity(existe);
+
     this.asignacionTurnoRotativoRepository.merge(existe, updateAsignacionTurnoRotativoDto);
     const actualizar = await this.asignacionTurnoRotativoRepository.save(existe);
     
@@ -202,9 +205,11 @@ export class AsignacionTurnoRotativoService {
         const inicioFormateado = new Date(actualizar.fecha_inicio_turno).toLocaleDateString('es-ES', opcionesFecha);
         const finFormateado = new Date(actualizar.fecha_fin_turno).toLocaleDateString('es-ES', opcionesFecha);
 
+        const textoCambios = generarTextoCambios(existeAntiguo, updateAsignacionTurnoRotativoDto);
+
         const registroEvento = this.asignacionTurnoRotativoRepository.manager.create(RegistroEvento, {
           usuario: autor?.username,
-          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el turno rotativo (${inicioFormateado}) del empleado "${existe.empleado?.nombres || ''} ${existe.empleado?.apellido_paterno || ''}" perteneciente a la empresa "${existe.empleado?.empresa?.nombre_empresa || 'Desconocida'}"`,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el turno rotativo (${inicioFormateado}) del empleado "${existe.empleado?.nombres || ''} ${existe.empleado?.apellido_paterno || ''}" perteneciente a la empresa "${existe.empleado?.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
           tipo_evento: 'Edición Asignación Turno Rotativo',
           ip: ip,
           fecha: new Date(),

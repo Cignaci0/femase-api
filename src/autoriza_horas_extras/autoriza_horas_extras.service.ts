@@ -10,6 +10,10 @@ import { Marca } from 'src/marcas/entities/marca.entity';
 import { Turno } from 'src/turno/entities/turno.entity';
 import { AsignacionTurnoRotativo } from 'src/asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { User } from 'src/users/user.entity';
+import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
+const UAParser = require('ua-parser-js');
 
 const timeToDecimal = (timeStr?: string): number => {
   if (!timeStr) return 0;
@@ -292,7 +296,18 @@ export class AutorizaHorasExtrasService {
     return `This action returns a #${id} autorizaHorasExtra`;
   }
 
-  async update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
+  async update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto, idUsuario?: number, ip?: string, userAgent?: string) {
+    const registroPrevio = await this.autorizaHorasExtrasRepository.findOne({ 
+      where: { id },
+      relations: ['empleado', 'empleado.empresa'] 
+    });
+
+    if (!registroPrevio) {
+      throw new Error('Registro no encontrado');
+    }
+
+    const registroAntiguo = cloneEntity(registroPrevio);
+
     const { multiplicador, horas_extras: horasEnviadas, ...restDto } = updateAutorizaHorasExtraDto;
 
     // Si se está aprobando y viene un multiplicador desde el frontend
@@ -393,7 +408,50 @@ export class AutorizaHorasExtrasService {
       (restDto as any).observacion = 'Horas extras denegadas';
     }
 
-    return this.autorizaHorasExtrasRepository.update(id, restDto as any);
+    const resultado = await this.autorizaHorasExtrasRepository.update(id, restDto as any);
+
+    // --- AUDITORÍA ---
+    if (idUsuario && !isNaN(idUsuario)) {
+      const autor = await this.autorizaHorasExtrasRepository.manager.findOne(User, {
+        where: { usuario_id: idUsuario },
+        relations: ['empleado', 'empresa']
+      });
+
+      if (autor) {
+        let empleadoAutor: Empleado | null = null;
+        if (autor?.empleado?.empleado_id) {
+          empleadoAutor = await this.autorizaHorasExtrasRepository.manager.findOne(Empleado, {
+            where: { empleado_id: autor.empleado.empleado_id },
+            relations: ['empresa', 'cenco', 'cenco.departamento']
+          });
+        }
+
+        const parser = new UAParser(userAgent || '');
+        const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
+
+        const textoCambios = generarTextoCambios(registroAntiguo, restDto);
+
+        const registroEvento = this.autorizaHorasExtrasRepository.manager.create(RegistroEvento, {
+          usuario: autor?.username,
+          evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha resuelto la autorización de horas extras del empleado "${registroPrevio.empleado?.nombres} ${registroPrevio.empleado?.apellido_paterno}". ${textoCambios}`,
+          tipo_evento: 'Resolución Horas Extras',
+          ip: ip || 'Desconocida',
+          fecha: new Date(),
+          hora: new Date().toTimeString().split(' ')[0],
+          sistema_operativo: parser.getOS().name || 'Desconocido',
+          browser: navegador,
+          empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+          depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+          cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+          rut: autor?.run_usuario
+        });
+
+        await this.autorizaHorasExtrasRepository.manager.save(registroEvento);
+      }
+    }
+    // -----------------
+
+    return resultado;
   }
 
   remove(id: number) {

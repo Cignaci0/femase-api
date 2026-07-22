@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 import * as path from 'path';
 import * as fs from 'fs';
@@ -96,6 +97,8 @@ export class FeriadosService {
       throw new NotFoundException(`El feriado con ID ${id} no existe`);
     }
 
+    const feriadoAntiguo = cloneEntity(feriado);
+
     // 2. Mezclamos los datos
     this.feriadosRepository.merge(feriado, updateFeriadoDto);
 
@@ -121,9 +124,11 @@ export class FeriadosService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(feriadoAntiguo, updateFeriadoDto);
+
           const registroEvento = this.feriadosRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del feriado "${actualizada.nombre}" para la fecha "${actualizada.fecha}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del feriado "${actualizada.nombre}" para la fecha "${actualizada.fecha}". ${textoCambios}`,
             tipo_evento: 'Edición de Feriado',
             ip: ip,
             fecha: new Date(),

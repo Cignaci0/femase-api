@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -100,6 +101,8 @@ export class AfpService {
       throw new NotFoundException(`La AFP con ID ${id} no existe`);
     }
 
+    const afpAntiguo = cloneEntity(afp);
+
     // 2. Mezclamos los datos
     this.afpRepository.merge(afp, updateAfpDto);
 
@@ -125,9 +128,11 @@ export class AfpService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(afpAntiguo, updateAfpDto);
+
           const registroEvento = this.afpRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos de la AFP "${actualizada.nombre_afp}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos de la AFP "${actualizada.nombre_afp}". ${textoCambios}`,
             tipo_evento: 'Edición de AFP',
             ip: ip,
             fecha: new Date(),

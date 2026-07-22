@@ -12,6 +12,7 @@ import { User } from 'src/users/user.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { NumberLiteralType } from 'typescript';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -109,13 +110,20 @@ export class EmpresasService {
   }
 
   async actualizarEmpresa(id: number, updateDto: UpdateEmpresaDto, idUsuario: number, ip: string, userAgent: string): Promise<any> {
+    const empresaAntigua = await this.empresaRepository.findOne({ 
+      where: { empresa_id: id },
+      relations: ['estado']
+    });
+    if (!empresaAntigua) {
+      throw new NotFoundException(`La empresa con ID ${id} no existe`);
+    }
+
     // 1. Preload busca por ID y "mezcla" los datos nuevos con los existentes
     const empresa = await this.empresaRepository.preload({
       empresa_id: id,
       ...updateDto,
     });
 
-    // 2. Si no existe el ID, lanzamos 404
     if (!empresa) {
       throw new NotFoundException(`La empresa con ID ${id} no existe`);
     }
@@ -144,9 +152,11 @@ export class EmpresasService {
       const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
       const sistemaOperativo = os.name || 'Desconocido';
 
+      const textoCambios = generarTextoCambios(empresaAntigua, updateDto);
+
       const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
         usuario: autor?.username,
-        evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha editado la empresa "${actualizada.nombre_empresa}"`,
+        evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha editado la empresa "${actualizada.nombre_empresa}". ${textoCambios}`,
         tipo_evento: 'Edición de Empresa',
         ip: ip,
         fecha: new Date(),
@@ -183,6 +193,7 @@ export class EmpresasService {
     if (!empresa) {
       throw new NotFoundException('Empresa no encontrada');
     }
+    const empresaAntigua = cloneEntity(empresa);
     empresa.horario = horario;
     const actualizada = await this.empresaRepository.save(empresa);
 
@@ -206,9 +217,11 @@ export class EmpresasService {
     const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
     const sistemaOperativo = os.name || 'Desconocido';
 
+    const textoCambios = generarTextoCambios(empresaAntigua, { horario });
+
     const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
       usuario: autor?.username,
-      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el horario de la empresa "${actualizada.nombre_empresa}" a ${actualizada.horario} horas`,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el horario de la empresa "${actualizada.nombre_empresa}" a ${actualizada.horario} horas. ${textoCambios}`,
       tipo_evento: 'Cambio de Zona Horaria',
       ip: ip,
       fecha: new Date(),
@@ -322,6 +335,7 @@ export class EmpresasService {
     if (!empresa) {
       throw new NotFoundException('Empresa no encontrada');
     }
+    const empresaAntigua = cloneEntity(empresa);
     empresa.cierre_mes = cierreMes;
     const actualizada = await this.empresaRepository.save(empresa);
 
@@ -345,9 +359,11 @@ export class EmpresasService {
     const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
     const sistemaOperativo = os.name || 'Desconocido';
 
+    const textoCambios = generarTextoCambios(empresaAntigua, { cierre_mes: cierreMes });
+
     const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
       usuario: autor?.username,
-      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el cierre de mes de la empresa "${actualizada.nombre_empresa}" a ${actualizada.cierre_mes}`,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el cierre de mes de la empresa "${actualizada.nombre_empresa}" a ${actualizada.cierre_mes}. ${textoCambios}`,
       tipo_evento: 'Cambio de Cierre de Mes',
       ip: ip,
       fecha: new Date(),

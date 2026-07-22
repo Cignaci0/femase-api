@@ -12,6 +12,7 @@ import { DetalleTurno } from 'src/detalle-turno/entities/detalle-turno.entity';
 import { AuditoriaTurno } from 'src/detalle-turno/entities/auditoria-turno.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
 
@@ -132,12 +133,14 @@ export class TurnoService {
     // 1. Buscamos el turno cargando la relación empresa
     const turno = await this.turnoRepository.findOne({
       where: { turno_id: id },
-      relations: ['empresa']
+      relations: ['empresa', 'estado']
     });
 
     if (!turno) {
       throw new NotFoundException(`El turno con ID ${id} no existe`);
     }
+
+    const turnoAntiguo = cloneEntity(turno);
 
     // 2. Mezclamos los datos
     this.turnoRepository.merge(turno, updateTurnoDto);
@@ -164,9 +167,11 @@ export class TurnoService {
           const parser = new UAParser(userAgent);
           const navegador = `${parser.getBrowser().name}-${parser.getBrowser().version}`;
 
+          const textoCambios = generarTextoCambios(turnoAntiguo, updateTurnoDto);
+
           const registroEvento = this.turnoRepository.manager.create(RegistroEvento, {
             usuario: autor?.username,
-            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del turno "${actualizada.nombre}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}"`,
+            evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado los datos del turno "${actualizada.nombre}" para la empresa "${actualizada.empresa?.nombre_empresa || 'Desconocida'}". ${textoCambios}`,
             tipo_evento: 'Edición de Turno',
             ip: ip,
             fecha: new Date(),
