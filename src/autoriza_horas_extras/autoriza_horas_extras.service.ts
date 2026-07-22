@@ -459,7 +459,7 @@ export class AutorizaHorasExtrasService {
   }
 
   // Cron que se ejecuta cada hora para procesar el día anterior
-  @Cron('0 * * * *')
+  @Cron('* * * * *')
   async handleCron() {
     this.logger.log('Iniciando procesamiento automático de horas extras...');
 
