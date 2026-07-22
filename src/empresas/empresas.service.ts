@@ -11,6 +11,7 @@ import { join } from 'path';
 import { User } from 'src/users/user.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
+import { NumberLiteralType } from 'typescript';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -302,4 +303,69 @@ export class EmpresasService {
     return empresa.urlLogo;
   }
 
+  async obtenerCierreMes(idEmpresa:number){
+    const empresa = await this.empresaRepository.findOne({
+      where:{empresa_id:idEmpresa},
+      select:{cierre_mes:true, nombre_empresa:true}
+    })
+    if(!empresa){
+      throw new NotFoundException("No se encontro la empresa")
+    }
+    return {
+      empresa: empresa.nombre_empresa,
+      cierre_mes : empresa.cierre_mes
+    }
+  }
+
+  async actualizarCierreMes(id: number, cierreMes: number, idUsuario: number, ip: string, userAgent: string) {
+    const empresa = await this.empresaRepository.findOne({ where: { empresa_id: id } });
+    if (!empresa) {
+      throw new NotFoundException('Empresa no encontrada');
+    }
+    empresa.cierre_mes = cierreMes;
+    const actualizada = await this.empresaRepository.save(empresa);
+
+    // --- AUDITORÍA ---
+    const autor = await this.empresaRepository.manager.findOne(User, {
+      where: { usuario_id: idUsuario },
+      relations: ['empleado', 'empresa']
+    });
+
+    let empleadoAutor: Empleado | null = null;
+    if (autor?.empleado?.empleado_id) {
+      empleadoAutor = await this.empresaRepository.manager.findOne(Empleado, {
+        where: { empleado_id: autor.empleado.empleado_id },
+        relations: ['empresa', 'cenco', 'cenco.departamento']
+      });
+    }
+
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const navegador = `${browser.name || 'Desconocido'}-${browser.version || ''}`;
+    const sistemaOperativo = os.name || 'Desconocido';
+
+    const registroEvento = this.empresaRepository.manager.create(RegistroEvento, {
+      usuario: autor?.username,
+      evento: `El usuario ${autor?.username} de la empresa ${autor?.empresa?.nombre_empresa || 'Sin Empresa'} ha actualizado el cierre de mes de la empresa "${actualizada.nombre_empresa}" a ${actualizada.cierre_mes}`,
+      tipo_evento: 'Cambio de Cierre de Mes',
+      ip: ip,
+      fecha: new Date(),
+      hora: new Date().toTimeString().split(' ')[0],
+      sistema_operativo: sistemaOperativo,
+      browser: navegador,
+      empresa: empleadoAutor?.empresa?.nombre_empresa || autor?.empresa?.nombre_empresa,
+      depto: empleadoAutor?.cenco?.departamento?.nombre_departamento || "Sin Depto",
+      cenco: empleadoAutor?.cenco?.nombre_cenco || "Sin Cenco",
+      rut: autor?.run_usuario
+    });
+
+    await this.empresaRepository.manager.save(registroEvento);
+
+    return {
+      mensaje: 'Cierre de mes actualizado con éxito',
+      id: actualizada.empresa_id,
+      cierre_mes: actualizada.cierre_mes
+    };
+  }
 }

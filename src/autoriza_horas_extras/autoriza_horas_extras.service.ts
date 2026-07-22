@@ -4,11 +4,27 @@ import { UpdateAutorizaHorasExtraDto } from './dto/update-autoriza_horas_extra.d
 import { InjectRepository } from '@nestjs/typeorm';
 import { AutorizaHorasExtra } from './entities/autoriza_horas_extra.entity';
 import { Between, Repository } from 'typeorm';
+import { HorasCompensacion } from 'src/horas_compensacion/entities/horas_compensacion.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Marca } from 'src/marcas/entities/marca.entity';
 import { Turno } from 'src/turno/entities/turno.entity';
 import { AsignacionTurnoRotativo } from 'src/asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
+
+const timeToDecimal = (timeStr?: string): number => {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':').map(Number);
+  return (parts[0] || 0) + ((parts[1] || 0) / 60) + ((parts[2] || 0) / 3600);
+};
+
+const decimalToTime = (decimalHours: number): string => {
+  const totalSeconds = Math.round(decimalHours * 3600);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+};
 
 @Injectable()
 export class AutorizaHorasExtrasService {
@@ -23,6 +39,8 @@ export class AutorizaHorasExtrasService {
     private readonly marcaRepository: Repository<Marca>,
     @InjectRepository(AsignacionTurnoRotativo)
     private readonly asignacionTurnoRotativoRepository: Repository<AsignacionTurnoRotativo>,
+    @InjectRepository(HorasCompensacion)
+    private readonly horasCompensacionRepo: Repository<HorasCompensacion>,
   ) { }
 
   async create(numFicha: string, fechaEvaluar?: Date) {
@@ -99,12 +117,14 @@ export class AutorizaHorasExtrasService {
     // 3. OBTENER HORARIO TEÓRICO (Para saber si es turno nocturno)
     let horaEntradaTeorica: string | null = null;
     let horaSalidaTeorica: string | null = null;
+    let colacionTeoricaStr: string | null = null;
 
     const turnoNormal = empleado.turno?.detalle_turno?.find(t => t.dia?.cod_dia === diaEnNumero)
     
     if (turnoNormal) {
       horaEntradaTeorica = turnoNormal.horario.hora_entrada;
       horaSalidaTeorica = turnoNormal.horario.hora_salida;
+      colacionTeoricaStr = turnoNormal.horario.colacion;
     } else if (empleado.turno === null && empleado.permite_rotativo === true) {
       const turnoRotativo = await this.asignacionTurnoRotativoRepository.findOne({
         where: {
@@ -116,6 +136,7 @@ export class AutorizaHorasExtrasService {
       if (turnoRotativo) {
         horaEntradaTeorica = turnoRotativo.horario.hora_entrada;
         horaSalidaTeorica = turnoRotativo.horario.hora_salida;
+        colacionTeoricaStr = turnoRotativo.horario.colacion;
       }
     }
 
@@ -125,10 +146,14 @@ export class AutorizaHorasExtrasService {
 
     const realEntradaTeorica = parseTime(horaEntradaTeorica);
     const realSalidaTeorica = parseTime(horaSalidaTeorica);
+    const colacionDec = colacionTeoricaStr ? parseTime(colacionTeoricaStr) : 0;
     
     // Si sale a una hora menor a la que entró (ej 06:00 < 22:00), es nocturno
     const esTurnoNocturno = realSalidaTeorica < realEntradaTeorica;
-    const horaTeorica = esTurnoNocturno ? (24 - realEntradaTeorica + realSalidaTeorica) : (realSalidaTeorica - realEntradaTeorica);
+    
+    // Calculamos las horas brutas y le restamos la colación teórica del turno
+    const horasBrutas = esTurnoNocturno ? (24 - realEntradaTeorica + realSalidaTeorica) : (realSalidaTeorica - realEntradaTeorica);
+    const horaTeorica = horasBrutas - colacionDec;
 
     // 4. DEFINIR VENTANA DE BÚSQUEDA DE MARCAS
     const fechaInicioBusqueda = new Date(fechaInicioDia);
@@ -267,8 +292,108 @@ export class AutorizaHorasExtrasService {
     return `This action returns a #${id} autorizaHorasExtra`;
   }
 
-  update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
-    return this.autorizaHorasExtrasRepository.update(id, updateAutorizaHorasExtraDto);
+  async update(id: number, updateAutorizaHorasExtraDto: UpdateAutorizaHorasExtraDto) {
+    const { multiplicador, horas_extras: horasEnviadas, ...restDto } = updateAutorizaHorasExtraDto;
+
+    // Si se está aprobando y viene un multiplicador desde el frontend
+    if (restDto.estado === 'A' && multiplicador) {
+      let baseHoras = horasEnviadas;
+
+      // Si el supervisor no envió horas recortadas, buscamos las originales ("crudas") en la base de datos
+      if (!baseHoras) {
+        const registro = await this.autorizaHorasExtrasRepository.findOne({ where: { id } });
+        if (registro && registro.horas_extras) {
+          baseHoras = registro.horas_extras;
+        }
+      }
+      
+      if (baseHoras) {
+        // Convertimos el "HH:MM:SS" base a formato decimal
+        const parts = baseHoras.split(':').map(Number);
+        const hours = parts[0] || 0;
+        const minutes = parts[1] || 0;
+        const seconds = parts[2] || 0;
+        const decimalHours = hours + (minutes / 60) + (seconds / 3600);
+
+        // Aplicamos el multiplicador (ej: 1.5 o 2) a las horas base elegidas
+        const multipliedHours = decimalHours * multiplicador;
+
+        // Volvemos a formatear a "HH:MM:SS"
+        const absoluteHours = Math.floor(multipliedHours);
+        const finalMinutes = Math.floor((multipliedHours - absoluteHours) * 60);
+        const finalSeconds = Math.round(((multipliedHours - absoluteHours) * 60 - finalMinutes) * 60);
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        
+        // Adjuntamos las horas ya multiplicadas al objeto que se va a guardar
+        (restDto as any).horas_extras = `${pad(absoluteHours)}:${pad(finalMinutes)}:${pad(finalSeconds)}`;
+      }
+    } else if (horasEnviadas) {
+      // Si no están aprobando con multiplicador pero de todas formas mandan horas_extras, se las guardamos
+      (restDto as any).horas_extras = horasEnviadas;
+    }
+
+    if (restDto.estado === 'A') {
+      (restDto as any).observacion = 'Horas extras autorizadas';
+      
+      // --- NUEVA LÓGICA: BANCO DE HORAS ---
+      const registroOriginal = await this.autorizaHorasExtrasRepository.findOne({ 
+        where: { id }, 
+        relations: ['empleado', 'empleado.empresa'] 
+      });
+
+      if (registroOriginal && registroOriginal.empleado) {
+        const fecha = new Date(registroOriginal.fecha_marca);
+        let anio = fecha.getFullYear();
+        let mes = fecha.getMonth() + 1; // 1 a 12
+        const dia = fecha.getDate();
+
+        // Obtenemos el cierre_mes de la empresa (por defecto 31 si no está configurado)
+        const cierreMes = registroOriginal.empleado.empresa?.cierre_mes || 31;
+
+        // Si el día supera el cierre de mes, las horas caen al mes siguiente
+        if (dia > cierreMes) {
+          mes += 1;
+          if (mes > 12) {
+            mes = 1;
+            anio += 1;
+          }
+        }
+
+        const periodoStr = `${anio}-${String(mes).padStart(2, '0')}`;
+
+        const horasAprobadas = (restDto as any).horas_extras || registroOriginal.horas_extras;
+
+        let bancoMensual = await this.horasCompensacionRepo.findOne({
+          where: { 
+            empleado: { empleado_id: registroOriginal.empleado.empleado_id },
+            periodo: periodoStr
+          }
+        });
+
+        if (!bancoMensual) {
+          bancoMensual = this.horasCompensacionRepo.create({
+            empleado: registroOriginal.empleado,
+            periodo: periodoStr,
+            horas_extras: horasAprobadas,
+            horas_pagas: horasAprobadas
+          });
+        } else {
+          const totalExtras = timeToDecimal(bancoMensual.horas_extras) + timeToDecimal(horasAprobadas);
+          const totalPagas = timeToDecimal(bancoMensual.horas_pagas) + timeToDecimal(horasAprobadas);
+          
+          bancoMensual.horas_extras = decimalToTime(totalExtras);
+          bancoMensual.horas_pagas = decimalToTime(totalPagas);
+        }
+
+        await this.horasCompensacionRepo.save(bancoMensual);
+      }
+      // --- FIN NUEVA LÓGICA ---
+      
+    } else if (restDto.estado === 'R') {
+      (restDto as any).observacion = 'Horas extras denegadas';
+    }
+
+    return this.autorizaHorasExtrasRepository.update(id, restDto as any);
   }
 
   remove(id: number) {
@@ -276,7 +401,7 @@ export class AutorizaHorasExtrasService {
   }
 
   // Cron que se ejecuta cada hora para procesar el día anterior
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('0 * * * *')
   async handleCron() {
     this.logger.log('Iniciando procesamiento automático de horas extras...');
 
