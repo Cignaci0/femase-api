@@ -81,10 +81,6 @@ export class Empleado {
   @ApiProperty({ description: 'Indica si aplica artículo 22', example: false })
   art_22: boolean;
 
-  @Column()
-  @ApiProperty({ description: 'Indica si el empleado autoriza ausencia', example: true })
-  autoriza_ausencia: boolean;
-
   @Column({ nullable: true })
   @ApiProperty({ description: 'Clave de acceso del empleado', example: '1234' })
   clave: string;
