@@ -206,10 +206,10 @@ export class EmpleadoService {
   ): Promise<any> {
     const dtoTransformado = { ...updateEmpleadoDto };
     
-    // 1. Buscamos el empleado cargando la relación empresa
+    // 1. Buscamos el empleado cargando las relaciones clave para la auditoría
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: id },
-      relations: ['empresa']
+      relations: ['empresa', 'cenco', 'cargo', 'estado', 'turno']
     });
 
     if (!empleado) {
