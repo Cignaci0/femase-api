@@ -9,7 +9,7 @@ import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.ent
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
-//hola
+
 
 @Injectable()
 export class AfpService {
