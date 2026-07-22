@@ -177,4 +177,6 @@ export class Empleado {
   @ApiProperty({ description: 'hora turno flexible', example: "01:00" })
   hora_turno_flexible: string
 
+  @OneToMany(() => DiasCompensacion, (dias_compensacion) => dias_compensacion.empleado)
+  dias_compensacion: DiasCompensacion[];
 }
