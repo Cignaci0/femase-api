@@ -272,7 +272,7 @@ export class ReportesService {
       contentArr.push(
         {
           columns: [
-            { text: `Razón Social: ${dataAsistencia.empleado.empresa?.nombre_empresa.toUpperCase() || 'FEMASE'}\nRUT Empresa: ${dataAsistencia.empleado.empresa?.rut_empresa || 'Sin rut'}\nDependiente sujeto a banda horaria: NO`, width: '*', fontSize: 8 },
+            { text: `Razón Social: ${dataAsistencia.empleado.empresa?.nombre_empresa.toUpperCase() || 'FEMASE'}\nRUT Empresa: ${dataAsistencia.empleado.empresa?.rut_empresa || 'Sin rut'}\nDependiente sujeto a banda horaria: NO\nHorario Flexible: ${dataAsistencia.empleado.tiene_turno_flexible ? 'S' : 'N'}`, width: '*', fontSize: 8 },
             { text: `Nombre: ${data.nombre.toUpperCase()}\nRUT: ${data.rut}\nLugar de prestación de servicios: ${data.centroCosto.toUpperCase()}`, width: '*', fontSize: 8 }
           ],
           margin: [0, 20, 0, 10]
@@ -283,6 +283,12 @@ export class ReportesService {
             widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'],
             body: tableBody
           }
+        },
+        {
+          text: `Resumen:\nTotal dias trabajados: ${totalDiasTrabajados}\nTotal Días Ausente: ${totalDiasAusente}\nTotal Días Descanso: ${totalDiasDescanso}\nTotal Días Feriado: ${totalDiasFeriado}\nHoras Extras aprobadas: Esto lo veré mas tarde pero agrega el texto`,
+          margin: [0, 10, 0, 10],
+          fontSize: 8,
+          bold: true
         }
       );
     }
@@ -747,8 +753,8 @@ export class ReportesService {
   }
 
   async generarReporteAusencias(
-    numFicha: string, 
-    fechaInicioStr?: string, 
+    numFicha: string,
+    fechaInicioStr?: string,
     fechaFinStr?: string,
     idUsuario?: number,
     ip?: string,

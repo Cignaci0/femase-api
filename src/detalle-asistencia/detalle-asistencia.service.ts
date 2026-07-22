@@ -169,8 +169,41 @@ export class DetalleAsistenciaService {
         }
       }
 
-      const entTeo = reg.entradaTeorica !== '-' ? reg.entradaTeorica.substring(0, 5) : '-';
-      const salTeo = reg.salidaTeorica !== '-' ? reg.salidaTeorica.substring(0, 5) : '-';
+      let entTeo = reg.entradaTeorica !== '-' ? reg.entradaTeorica.substring(0, 5) : '-';
+      let salTeo = reg.salidaTeorica !== '-' ? reg.salidaTeorica.substring(0, 5) : '-';
+      const entReal = reg.entrada ? reg.entrada.substring(0, 5) : '-';
+      const salReal = reg.salida ? reg.salida.substring(0, 5) : '-';
+
+      // Lógica de turno flexible
+      if (empleado.tiene_turno_flexible && empleado.hora_turno_flexible && entTeo !== '-' && salTeo !== '-' && entReal !== '-') {
+        const flexMs = parseMs(empleado.hora_turno_flexible);
+        if (flexMs > 0) {
+          const entTeoMs = parseMs(entTeo);
+          const entRealMs = parseMs(entReal);
+          let diffMs = entRealMs - entTeoMs;
+          
+          // Ajuste si la diferencia cruza la medianoche
+          if (diffMs < -12 * 3600000) diffMs += 24 * 3600000;
+          if (diffMs > 12 * 3600000) diffMs -= 24 * 3600000;
+
+          let ajusteMs = diffMs;
+          if (ajusteMs > flexMs) ajusteMs = flexMs;
+          if (ajusteMs < -flexMs) ajusteMs = -flexMs;
+
+          let nuevoEntTeoMs = entTeoMs + ajusteMs;
+          let nuevoSalTeoMs = parseMs(salTeo) + ajusteMs;
+
+          if (nuevoEntTeoMs < 0) nuevoEntTeoMs += 24 * 3600000;
+          if (nuevoEntTeoMs >= 24 * 3600000) nuevoEntTeoMs -= 24 * 3600000;
+          if (nuevoSalTeoMs < 0) nuevoSalTeoMs += 24 * 3600000;
+          if (nuevoSalTeoMs >= 24 * 3600000) nuevoSalTeoMs -= 24 * 3600000;
+
+          entTeo = formatMs(nuevoEntTeoMs).substring(0, 5);
+          salTeo = formatMs(nuevoSalTeoMs).substring(0, 5);
+          reg.entradaTeorica = formatMs(nuevoEntTeoMs);
+          reg.salidaTeorica = formatMs(nuevoSalTeoMs);
+        }
+      }
 
       let hrsTeoricasMs = 0;
       if (entTeo !== '-' && salTeo !== '-') {
@@ -179,9 +212,6 @@ export class DetalleAsistenciaService {
       } else {
         reg.horasTeoricas = '-';
       }
-
-      const entReal = reg.entrada ? reg.entrada.substring(0, 5) : '-';
-      const salReal = reg.salida ? reg.salida.substring(0, 5) : '-';
 
       let hrsPresencialesMs = 0;
       if (entReal !== '-' && salReal !== '-') {
