@@ -6,11 +6,11 @@ import { Empleado } from './entities/empleado.entity';
 import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('empleado')
-@UseGuards(AuthGuard)
 export class EmpleadoController {
   constructor(private readonly empleadoService: EmpleadoService) { }
 
 
+  @UseGuards(AuthGuard)
   @Patch('actualizar/:id')
   update(
     @Param('id') id: string, 
@@ -23,6 +23,7 @@ export class EmpleadoController {
     return this.empleadoService.update(+id, updateEmpleadoDto, idUsuario, ip, userAgent);
   }
 
+  @UseGuards(AuthGuard)
   @Post()
   create(
     @Body() createEmpleadoDto: Empleado,
@@ -34,6 +35,7 @@ export class EmpleadoController {
     return this.empleadoService.create(createEmpleadoDto, idUsuario, ip, userAgent);
   }
 
+  @UseGuards(AuthGuard)
   @Get()
   findAll(
     @Query('page') page: string,
@@ -51,27 +53,38 @@ export class EmpleadoController {
     );
   }
 
+  @UseGuards(AuthGuard)
   @Get('run/:run')
   findByRun(@Param('run') run: string) {
     return this.empleadoService.findByRun(run);
   }
 
+  @UseGuards(AuthGuard)
   @Get('nombre/:nombre')
   findByNombre(@Param('nombre') nombre: string) {
     return this.empleadoService.findByNombre(nombre);
   }
 
+  @UseGuards(AuthGuard)
   @Get('empresa/:empresa_id')
   findByEmpresa(@Param('empresa_id') empresa_id: string) {
     if (isNaN(+empresa_id)) return [];
     return this.empleadoService.findByEmpresa(+empresa_id);
   }
 
+  @Get('cenco/:cenco_id')
+  findByCenco(@Param('cenco_id') cenco_id: string) {
+    if (isNaN(+cenco_id)) return [];
+    return this.empleadoService.findByCenco(+cenco_id);
+  }
+
+  @UseGuards(AuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.empleadoService.remove(+id);
   }
 
+  @UseGuards(AuthGuard)
   @Patch('cambiar-pin/:idUser/:pinActual/:pinFirma')
   cambiarPinFirma(
     @Param('idUser') idUser: string, 
@@ -83,11 +96,13 @@ export class EmpleadoController {
     return this.empleadoService.cambiarPinFirma(+idUser, +pinActual, +pinFirma, ip, userAgent);
   }
 
+  @UseGuards(AuthGuard)
   @Patch('cambiar-noti/:idusuario')
   cambiarNoti(@Param('idusuario') idusuario: string, @Body('noti_30_entrada') noti_30_entrada: boolean, @Body('noti_30_salida') noti_30_salida: boolean) {
     return this.empleadoService.cambiarNoti(+idusuario, noti_30_entrada, noti_30_salida);
   }
 
+  @UseGuards(AuthGuard)
   @Get('obtener-noti/:idusuario')
   obtenerNoti(@Param('idusuario') idusuario: string) {
     return this.empleadoService.obtenerNoti(+idusuario);

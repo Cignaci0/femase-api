@@ -95,8 +95,8 @@ import { SolicitudHorasCompensacion } from './solicitud_horas_compensacion/entit
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'superadmin',
-      database: 'femase',
+      password: 'Admin',
+      database: 'postgres',
       synchronize: false,
       entities: [
         User,
