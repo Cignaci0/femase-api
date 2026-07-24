@@ -3,8 +3,11 @@ import { UsersService } from './users.service';
 import { User } from './user.entity';
 import { UpdateUsuarioDto } from './dto/update-user.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { Public } from 'src/auth/public.decorator';
+
 
 @Controller('users')
+@UseGuards(AuthGuard)
 export class UsersController {
   constructor(private userService: UsersService) { }
   @Get('')
@@ -34,6 +37,7 @@ export class UsersController {
     return await this.userService.actualizarClave(run, codigo, nuevaClave);
   }
 
+  @Public()
   @Get('crear-usuario-dt/:correoDT')
   async crearFiscalizador(@Param('correoDT') correoDT: string) {
     return await this.userService.crearUsuarioDT(correoDT);

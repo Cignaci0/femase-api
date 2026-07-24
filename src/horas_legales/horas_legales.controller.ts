@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Ip, Headers, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Ip, Headers, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard } from 'src/auth/auth.guard';
 import { HorasLegalesService } from './horas_legales.service';
 import { CreateHorasLegaleDto } from './dto/create-horas_legale.dto';
 import { UpdateHorasLegaleDto } from './dto/update-horas_legale.dto';
 
 @Controller('horas-legales')
+@UseGuards(AuthGuard)
 export class HorasLegalesController {
   constructor(private readonly horasLegalesService: HorasLegalesService) {}
 
