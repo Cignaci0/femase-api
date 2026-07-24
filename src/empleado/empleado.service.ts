@@ -383,6 +383,28 @@ export class EmpleadoService {
     return empleados;
   }
 
+  async findByCenco(cenco_id: number) {
+    const empleados = await this.empleadoRepository.find({
+      where: { cenco: { cenco_id } },
+      relations: [
+        'estado',
+        'empresa',
+        'cargo',
+        'turno',
+        'cenco',
+        'turno.detalle_turno.horario',
+        'turno.detalle_turno.dia'
+      ],
+      order: { empleado_id: 'ASC' }
+    });
+
+    if (empleados.length === 0) {
+      throw new NotFoundException(`No se encontraron empleados para el centro de costo con ID ${cenco_id}`);
+    }
+
+    return empleados;
+  }
+
   async cambiarPinFirma(
     idUser: number, 
     pinActual: number, 
