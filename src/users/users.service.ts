@@ -233,7 +233,7 @@ export class UsersService {
 
   async crearUsuarioDT(correoDT: string) {
     try {
-      const emailDT = correoDT + '@gmail.com';
+      const emailDT = correoDT + '@dt.gob.cl';
       const nuevoPassword = "Femase" + Math.random().toString(36).substring(2, 9);
       const salt = await bcrypt.genSalt();
       const claveHash = await bcrypt.hash(nuevoPassword, salt);
