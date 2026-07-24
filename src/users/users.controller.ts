@@ -5,7 +5,6 @@ import { UpdateUsuarioDto } from './dto/update-user.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('users')
-@UseGuards(AuthGuard)
 export class UsersController {
   constructor(private userService: UsersService) { }
   @Get('')
