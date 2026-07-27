@@ -44,16 +44,16 @@ export class SolicitudesService {
         hour12: false,
       }),
     });
-    const empleado = await this.solicitudRepository.manager.findOne(Empleado, {
+    const administrador = await this.solicitudRepository.manager.findOne(User, {
       where: {
-        empleado_id: usuario?.empleado.empleado_id,
+        usuario_id: createSolicitudeDto.id_usuario_empleador,
       },
     });
     const fechaFormateada = now.toLocaleDateString('es-CL', { timeZone: 'America/Santiago' }).replace(/-/g, '/');
 
     try {
       await this.mailService.sendMail({
-        to: empleado?.email_laboral,
+        to: administrador?.email,
         subject: 'Nueva Solicitud de firma',
         html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
