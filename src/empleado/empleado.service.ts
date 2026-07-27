@@ -73,7 +73,7 @@ export class EmpleadoService {
       nombres: empleadoCreado?.nombres,
       apellido_paterno: empleadoCreado?.apellido_paterno,
       apellido_materno: empleadoCreado?.apellido_materno,
-      email: empleadoCreado?.email,
+      email: empleadoCreado?.email_laboral || empleadoCreado?.email,
       empresa: empleadoCreado?.empresa,
       estado: { estado_id: 1 },
       perfil: { perfil_id: 8 },
