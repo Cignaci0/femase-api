@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Ip, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Ip, Headers, UseGuards, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { join } from 'path';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { FirmasService } from './firmas.service';
 import { CreateFirmaDto } from './dto/create-firma.dto';
@@ -8,6 +10,22 @@ import { UpdateFirmaDto } from './dto/update-firma.dto';
 export class FirmasController {
   constructor(private readonly firmasService: FirmasService) { }
 
+
+  @Get('track/:id.avif')
+  async trackEmail(@Param('id') id: string, @Res() res: Response) {
+    await this.firmasService.marcarLeido(+id);
+    const imagePath = join(process.cwd(), 'src', 'utils', 'img correo.avif');
+    res.setHeader('Content-Type', 'image/avif');
+    res.sendFile(imagePath);
+  }
+
+  @Get('enviados')
+  @UseGuards(AuthGuard)
+  findAllEnviadosPorMi(@Req() req: any) {
+    const idUsuario = req.user?.usuario_id;
+    return this.firmasService.findAllEnviadosPorMi(idUsuario);
+  }
+
   @Post()
   @UseGuards(AuthGuard)
   create(
@@ -16,7 +34,7 @@ export class FirmasController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string
   ) {
-    const idUsuario = req.user?.sub;
+    const idUsuario = req.user?.usuario_id;
     return this.firmasService.create(createFirmaDto, idUsuario, ip, userAgent);
   }
 
@@ -42,7 +60,7 @@ export class FirmasController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string
   ) {
-    const idUsuario = req.user?.sub;
+    const idUsuario = req.user?.usuario_id;
     return this.firmasService.aprovarRechazarFirma(+id, updateFirmaDto, usuario_id, pin, idUsuario, ip, userAgent);
   }
 

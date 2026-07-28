@@ -1,7 +1,7 @@
 import { Empleado } from "src/empleado/entities/empleado.entity";
 import { Empresa } from "src/empresas/empresas.entity";
 import { User } from "src/users/user.entity";
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, CreateDateColumn } from "typeorm";
 
 @Entity({ name: 'firmas', schema: 'db_fmc' })
 export class Firma {
@@ -35,4 +35,14 @@ export class Firma {
 
     @Column({ type: 'text', nullable: true })
     motivo: string;
+
+    @Column()
+    leido:boolean
+
+    @ManyToOne(() => User, (usuario) => usuario.firmas)
+    @JoinColumn({ name: 'enviado_por' })
+    enviado_por: User;
+
+    @CreateDateColumn()
+    fecha_envio: Date;
 }

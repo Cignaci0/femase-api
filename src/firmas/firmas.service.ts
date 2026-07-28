@@ -20,6 +20,19 @@ export class FirmasService {
     private readonly mailerService: MailerService,
   ) { }
 
+
+  async marcarLeido(id: number) {
+    await this.firmaRepository.update(id, { leido: true });
+  }
+
+  async findAllEnviadosPorMi(idUsuario: number) {
+    return await this.firmaRepository.find({
+      where: { enviado_por: { usuario_id: idUsuario } },
+      order: { id: 'DESC' },
+      relations: ['empleado', 'empresa']
+    });
+  }
+
   async create(createFirmaDto: CreateFirmaDto, idUsuario?: number, ip?: string, userAgent?: string) {
     const firma = this.firmaRepository.create({
       nombre: createFirmaDto.nombre,
@@ -28,7 +41,9 @@ export class FirmasService {
       estado: "P",
       empresa: { empresa_id: createFirmaDto.empresa },
       empleado: { empleado_id: createFirmaDto.id_empleado },
-      ...(createFirmaDto.usuario && { usuario: { usuario_id: createFirmaDto.usuario } })
+      ...(createFirmaDto.usuario && { usuario: { usuario_id: createFirmaDto.usuario } }),
+      ...(idUsuario && { enviado_por: { usuario_id: idUsuario } }),
+      fecha_envio: new Date()
     });
     const empleado = await this.firmaRepository.manager.findOne(Empleado, {
       where: { empleado_id: createFirmaDto.id_empleado }
@@ -37,11 +52,9 @@ export class FirmasService {
       throw new NotFoundException("Empleado no encontrado");
     }
 
+    const guardada = await this.firmaRepository.save(firma);
     try {
-      await this.mailerService.sendMail({
-        to: empleado.email_laboral,
-        subject: "Nueva Solicitud de firma",
-        html: `
+      let htmlContent = `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
           <div style="background-color: #0088cc; padding: 20px; color: white; text-align: center;">
             <h2 style="margin: 0; font-size: 20px;">Nueva Solicitud de Firma</h2>
@@ -60,13 +73,20 @@ export class FirmasService {
             </div>
             <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
           </div>
-        </div>`
+        </div>`;
+        
+      if (createFirmaDto.tipo === "Anexos" || createFirmaDto.tipo === "Pactos") {
+          htmlContent += `\n<img src="http://localhost:3000/api/firmas/track/${guardada.id}.avif" width="1" height="1" style="display:none;" />`;
+      }
 
+      await this.mailerService.sendMail({
+        to: empleado.email_laboral,
+        subject: "Nueva Solicitud de firma",
+        html: htmlContent
       });
     } catch (error) {
       console.error("Error enviando email:", error.message);
     }
-    const guardada = await this.firmaRepository.save(firma);
 
     // --- AUDITORÍA ---
     if (idUsuario && !isNaN(idUsuario)) {
