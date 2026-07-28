@@ -104,4 +104,6 @@ export class User {
 
   @OneToMany(() => Alerta, (alerta) => alerta.usuario)
   alertas: Alerta[];
+
+  
 }
