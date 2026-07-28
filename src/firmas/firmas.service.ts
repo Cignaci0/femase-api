@@ -69,14 +69,14 @@ export class FirmasService {
             </div>
             <div style="margin-top: 30px;">
               <p style="font-size: 14px; color: #0088cc;">Puede revisar la solicitud en el sistema:</p>
-              <p><a href="http://localhost:5173/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
+              <p><a href="https://gestion.femase.cl/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #0088cc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Presione aquí</a></p>
             </div>
             <p style="margin-top: 30px; font-size: 14px; color: #0088cc;">Gracias por su atención y que tenga un buen día</p>
           </div>
         </div>`;
         
       if (createFirmaDto.tipo === "Anexos" || createFirmaDto.tipo === "Pactos") {
-          htmlContent += `\n<img src="http://localhost:3000/api/firmas/track/${guardada.id}.avif" width="1" height="1" style="display:none;" />`;
+          htmlContent += `\n<img src="https://gestion.femase.cl/api/firmas/track/${guardada.id}.avif" width="1" height="1" style="display:none;" />`;
       }
 
       await this.mailerService.sendMail({
