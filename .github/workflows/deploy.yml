@@ -27,7 +27,7 @@ jobs:
           version: 11
 
       - name: Instalar dependencias
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Detener PM2
         continue-on-error: true
