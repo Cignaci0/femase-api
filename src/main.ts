@@ -21,6 +21,6 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document); // 'api' is the endpoint URL for the docs
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }
 bootstrap();
