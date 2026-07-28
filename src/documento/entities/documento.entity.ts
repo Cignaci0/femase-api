@@ -19,5 +19,4 @@ export class Documento {
     @ManyToOne(() => Empresa, (empresa) => empresa.documentos)
     @JoinColumn({ name: 'empresa' })
     empresa: Empresa;
-
 }

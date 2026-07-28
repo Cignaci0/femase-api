@@ -122,6 +122,7 @@ export class AutorizaHorasExtrasService {
     let horaEntradaTeorica: string | null = null;
     let horaSalidaTeorica: string | null = null;
     let colacionTeoricaStr: string | null = null;
+    let marcaColacion: boolean = true;
 
     const turnoNormal = empleado.turno?.detalle_turno?.find(t => t.dia?.cod_dia === diaEnNumero)
     
@@ -129,6 +130,7 @@ export class AutorizaHorasExtrasService {
       horaEntradaTeorica = turnoNormal.horario.hora_entrada;
       horaSalidaTeorica = turnoNormal.horario.hora_salida;
       colacionTeoricaStr = turnoNormal.horario.colacion;
+      marcaColacion = turnoNormal.horario.marca_colacion;
     } else if (empleado.turno === null && empleado.permite_rotativo === true) {
       const turnoRotativo = await this.asignacionTurnoRotativoRepository.findOne({
         where: {
@@ -141,6 +143,7 @@ export class AutorizaHorasExtrasService {
         horaEntradaTeorica = turnoRotativo.horario.hora_entrada;
         horaSalidaTeorica = turnoRotativo.horario.hora_salida;
         colacionTeoricaStr = turnoRotativo.horario.colacion;
+        marcaColacion = turnoRotativo.horario.marca_colacion;
       }
     }
 
@@ -255,6 +258,11 @@ export class AutorizaHorasExtrasService {
       }
 
       horas_trabajadas -= totalGapsDec;
+
+      if (marcaColacion === false) {
+        horas_trabajadas -= colacionDec;
+      }
+      if (horas_trabajadas < 0) horas_trabajadas = 0;
 
       // 7. REGISTRAR HORAS EXTRAS SI CORRESPONDE
       if (horas_trabajadas > horaTeorica) {

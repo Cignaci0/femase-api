@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { Cenco } from 'src/cencos/cenco.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
+import { MailerService } from '@nestjs-modules/mailer';
 const UAParser = require('ua-parser-js');
 
 @Injectable()
@@ -18,6 +19,8 @@ export class EmpleadoService {
     private empleadoRepository: Repository<Empleado>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly mailerService: MailerService,
+
   ) { }
 
   async create(
@@ -120,6 +123,45 @@ export class EmpleadoService {
         });
 
         await this.empleadoRepository.manager.save(registroEvento);
+        try {
+          await this.mailerService.sendMail({
+            to: empleadoCreado?.email_laboral || empleadoCreado?.email,
+            subject: 'Cuenta de empleado',
+            html: `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f4f7f6; padding: 30px; border-radius: 10px; border: 1px solid #e1e8ed; color: #333333;">
+  
+            <h2 style="color: #2c3e50; text-align: center; margin-bottom: 25px;">¡Bienvenido al equipo! 🎉</h2>
+  
+            <p style="font-size: 16px; line-height: 1.5;">Hola <strong>${empleadoCreado?.nombres} ${empleadoCreado?.apellido_paterno} ${empleadoCreado?.apellido_materno}</strong>,</p>
+  
+            <p style="font-size: 16px; line-height: 1.5;">Nos complace informarte que tu cuenta de empleado ha sido creada de manera exitosa. A continuación, te compartimos tus credenciales de acceso:</p>
+  
+            <!-- Caja de credenciales -->
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border-left: 5px solid #3498db; margin: 25px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <p style="margin: 0 0 10px 0; font-size: 16px;">
+            <span style="color: #7f8c8d;">👤 Usuario:</span> 
+            <strong>${empleadoCreado?.num_ficha}</strong>
+            </p>
+            <p style="margin: 0; font-size: 16px;">
+            <span style="color: #7f8c8d;">🔑 Contraseña:</span> 
+            <strong>${empleadoCreado?.run}</strong>
+            </p>
+            <p style="margin: 0; font-size: 16px;">
+            <span style="color: #7f8c8d;">🔑 Pin Firma:</span> 
+            <strong>${empleadoCreado?.pin_firma}</strong>
+            </p>
+            </div>
+  
+            <p style="font-size: 14px; color: #7f8c8d; line-height: 1.5; margin-top: 20px;">
+            <em>Por motivos de seguridad, te recomendamos no compartir esta información con nadie.</em>
+            <em>Tanto su pin de firma como su contraseña pueden ser cambiadas a posterioridad en la plataforma.</em>
+            <p>Ingresa a <a href="https://gestion.femase.cl/">https://gestion.femase.cl/</a> para comenzar.</p>
+            </p>
+            </div>`
+          })
+        } catch (error) {
+          console.error(error);
+          throw new HttpException('Error al enviar el correo', 400);
+        }
       }
     }
     // -----------------
@@ -199,14 +241,31 @@ export class EmpleadoService {
   }
 
   async update(
-    id: number, 
-    updateEmpleadoDto: UpdateEmpleadoDto | any, 
-    idUsuario: number, 
-    ip: string, 
+    id: number,
+    updateEmpleadoDto: UpdateEmpleadoDto | any,
+    idUsuario: number,
+    ip: string,
     userAgent: string
   ): Promise<any> {
     const dtoTransformado = { ...updateEmpleadoDto };
-    
+
+    if (dtoTransformado.cargo !== undefined && typeof dtoTransformado.cargo !== 'object') {
+      dtoTransformado.cargo = { cargo_id: dtoTransformado.cargo };
+    }
+    if (dtoTransformado.empresa !== undefined && typeof dtoTransformado.empresa !== 'object') {
+      dtoTransformado.empresa = { empresa_id: dtoTransformado.empresa };
+    }
+    if (dtoTransformado.turno !== undefined && typeof dtoTransformado.turno !== 'object') {
+      dtoTransformado.turno = dtoTransformado.turno ? { turno_id: dtoTransformado.turno } : null;
+    }
+    if (dtoTransformado.estado !== undefined && typeof dtoTransformado.estado !== 'object') {
+      dtoTransformado.estado = { estado_id: dtoTransformado.estado };
+    }
+    if (dtoTransformado.cenco_id !== undefined && typeof dtoTransformado.cenco_id !== 'object') {
+      dtoTransformado.cenco = { cenco_id: dtoTransformado.cenco_id };
+      delete dtoTransformado.cenco_id;
+    }
+
     // 1. Buscamos el empleado cargando las relaciones clave para la auditoría
     const empleado = await this.empleadoRepository.findOne({
       where: { empleado_id: id },
@@ -216,7 +275,7 @@ export class EmpleadoService {
     if (!empleado) {
       throw new NotFoundException(`El empleado con ID ${id} no existe`);
     }
-    
+
     // Guardamos el estado original para la auditoría
     const empleadoAntiguo = cloneEntity(empleado);
 
@@ -406,19 +465,19 @@ export class EmpleadoService {
   }
 
   async cambiarPinFirma(
-    idUser: number, 
-    pinActual: number, 
-    pinFirma: number, 
-    ip: string, 
+    idUser: number,
+    pinActual: number,
+    pinFirma: number,
+    ip: string,
     userAgent: string
   ) {
     const usuario = await this.userRepository.findOne({
       where: { usuario_id: idUser },
       relations: ['empleado', 'empresa', 'empleado.empresa', 'empleado.cenco', 'empleado.cenco.departamento']
     });
-    
+
     if (!usuario) throw new NotFoundException(`El usuario con ID ${idUser} no existe`)
-    
+
     if (!usuario.empleado) {
       throw new BadRequestException('El usuario no tiene una ficha de empleado asociada para cambiar el PIN');
     }
@@ -430,7 +489,7 @@ export class EmpleadoService {
 
     if (!empleado) throw new NotFoundException(`El empleado asociado al usuario no existe`)
     if (empleado.pin_firma !== pinActual) throw new BadRequestException('El pin actual es incorrecto')
-    
+
     empleado.pin_firma = pinFirma;
     await this.empleadoRepository.save(empleado);
 

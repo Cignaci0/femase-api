@@ -17,7 +17,8 @@ export class HorarioController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string
   ) {
-    const idUsuario = req.user.sub;
+    console.log(createHorarioDto);
+      const idUsuario = req.user.sub;
     return this.horarioService.create(createHorarioDto, idUsuario, ip, userAgent);
   }
 

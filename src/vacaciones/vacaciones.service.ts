@@ -320,7 +320,7 @@ export class VacacionesService {
     });
 
     await this.mailerService.sendMail({
-      to: empleado.email, // CAMBIAR A CORREO LABORAL SI ES NECESARIO
+      to: empleado.email_laboral, 
       cc: empleado.email_noti,
       subject: 'Solicitud de Vacaciones',
       html: `
@@ -384,7 +384,115 @@ export class VacacionesService {
     return guardar;
   }
 
-  async findAll(numFicha: string, fechaInicio?: Date, fechaFin?: Date) {
+  async traerPendientes(empresaId?: number, page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+
+    let whereConditions: any = { estado: 'P' };
+    if (empresaId) {
+      whereConditions = {
+        estado: 'P',
+        empleado: { empresa: { empresa_id: empresaId } }
+      };
+    }
+
+    const [busqueda, total] = await this.vacacionesRepository.findAndCount({
+      where: whereConditions,
+      relations: ['empleado', 'empleado.cenco', 'empleado.cenco.departamento', 'empleado.empresa'],
+      order: {
+        fecha_ingreso: 'ASC'
+      },
+      select: {
+        id_vacaciones: true,
+        fecha_ingreso: true,
+        fecha_inicio: true,
+        fecha_fin: true,
+        dias_acumulados: true,
+        dias_efectivos: true,
+        saldo_vacaciones: true,
+        zona_extrema: true,
+        autorizador: true,
+        estado: true,
+        empleado: {
+          num_ficha: true,
+          nombres: true,
+          apellido_paterno: true,
+          apellido_materno: true,
+          run: true,
+          fecha_ini_contrato: true,
+          fecha_fin_contrato: true,
+          cenco: {
+            nombre_cenco: true,
+            departamento: {
+              nombre_departamento: true
+            }
+          },
+          empresa: {
+            nombre_empresa: true
+          }
+        }
+      },
+      skip,
+      take: limit
+    });
+
+    if (busqueda.length > 0) {
+      // Calculate data for each just like in findAll
+      for (const b of busqueda) {
+        if (!b.empleado) continue;
+        let multiplicadorDias = b.zona_extrema ? 1.67 : 1.25;
+        const fechaInicioContrato = new Date(b.empleado.fecha_ini_contrato);
+        fechaInicioContrato.setHours(0, 0, 0, 0);
+        const fechaActual = new Date();
+        fechaActual.setHours(0, 0, 0, 0);
+
+        let mesesTrabajados = (fechaActual.getFullYear() - fechaInicioContrato.getFullYear()) * 12 + (fechaActual.getMonth() - fechaInicioContrato.getMonth());
+        if (fechaActual.getDate() < fechaInicioContrato.getDate()) mesesTrabajados--;
+        if (mesesTrabajados < 0) mesesTrabajados = 0;
+
+        const diasDelMesActual = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0).getDate();
+        let fechaUltimoCumpleMes = new Date(fechaInicioContrato);
+        fechaUltimoCumpleMes.setMonth(fechaInicioContrato.getMonth() + mesesTrabajados);
+        const diffTime = fechaActual.getTime() - fechaUltimoCumpleMes.getTime();
+        const diasSueltos = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const proporcionalesNormales = (1.25 / diasDelMesActual) * diasSueltos;
+        const totalNormales = (mesesTrabajados * 1.25) + proporcionalesNormales;
+        
+        let totalZonaExtrema = 0;
+        if (b.zona_extrema) {
+          const proporcionalesZE = (0.42 / diasDelMesActual) * diasSueltos;
+          totalZonaExtrema = (mesesTrabajados * 0.42) + proporcionalesZE;
+        }
+
+        b.dias_acumulados = parseFloat((totalNormales + totalZonaExtrema).toFixed(2));
+
+        if (b.fecha_inicio && b.fecha_fin) {
+          const startDate = new Date(b.fecha_inicio);
+          const endDate = new Date(b.fecha_fin);
+          let diasEfectivos = 0;
+          const current = new Date(startDate.getTime());
+          while (current <= endDate) {
+            const dayOfWeek = current.getDay();
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) diasEfectivos++;
+            current.setDate(current.getDate() + 1);
+          }
+          b.dias_efectivos = diasEfectivos;
+          b.saldo_vacaciones = parseFloat((b.dias_acumulados - b.dias_efectivos).toFixed(2));
+        }
+      }
+    }
+
+    return {
+      vacaciones: busqueda,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  async findAll(numFicha: string, fechaInicio?: Date, fechaFin?: Date, page: number = 1, limit: number = 10) {
     let whereConditions: any = {
       empleado: { num_ficha: numFicha }
     };
@@ -396,7 +504,9 @@ export class VacacionesService {
       ];
     }
 
-    const busqueda = await this.vacacionesRepository.find({
+    const skip = (page - 1) * limit;
+
+    const [busqueda, total] = await this.vacacionesRepository.findAndCount({
       where: whereConditions,
       relations: ['empleado'],
       order: {
@@ -415,14 +525,24 @@ export class VacacionesService {
         estado: true,
         empleado: {
           num_ficha: true,
+          nombres: true,
+          apellido_paterno: true,
+          apellido_materno: true,
+          run: true,
           fecha_ini_contrato: true,
           fecha_fin_contrato: true,
         }
-      }
+      },
+      skip,
+      take: limit
     });
 
     if (busqueda.length === 0) {
-      throw new HttpException('No se encontraron vacaciones para el número de ficha proporcionado o en el rango de fechas seleccionado', 404);
+      return {
+        vacaciones: [],
+        resumen: { totalNormales: 0, totalZonaExtrema: 0, totalAcumulados: 0, diasUtilizados: 0, diasDisponibles: 0 },
+        pagination: { total: 0, page: Number(page), limit: Number(limit), totalPages: 0 }
+      };
     }
 
     if (busqueda[0].empleado.fecha_fin_contrato) {
@@ -508,6 +628,12 @@ export class VacacionesService {
         totalAcumulados: parseFloat(diasAcumulados.toFixed(2)),
         diasUtilizados: parseFloat(diasUtilizados.toFixed(2)),
         diasDisponibles: diasDisponibles
+      },
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit)
       }
     };
   }

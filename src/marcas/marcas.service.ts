@@ -78,8 +78,8 @@ export class MarcasService {
           await this.turnoFlexibleRepository.save(flexibleMark);
         }
 
-        if (empleadoInfo.email) {
-          const correoEmpleado = empleadoInfo.email;
+        if (empleadoInfo.email_laboral) {
+          const correoEmpleado = empleadoInfo.email_laboral;
           const nombreEmpleado = empleadoInfo.nombres + ' ' + empleadoInfo.apellido_paterno + ' ' + empleadoInfo.apellido_materno;
           const direccionMarca = empleadoInfo.cenco?.direccion || 'No especificada';
 

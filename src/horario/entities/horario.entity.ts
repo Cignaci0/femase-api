@@ -66,4 +66,7 @@ export class Horario {
 
   @Column()
   hora_fin_colacion: string;
+
+  @Column()
+  marca_colacion: boolean;
 }

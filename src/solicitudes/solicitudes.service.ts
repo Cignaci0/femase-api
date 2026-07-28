@@ -86,7 +86,7 @@ export class SolicitudesService {
 
     try {
       await this.mailService.sendMail({
-        to: usuario?.email,
+        to: usuario?.empleado?.email_laboral || usuario?.email,
         subject: 'Nueva Solicitud de firma',
         html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">

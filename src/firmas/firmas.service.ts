@@ -167,7 +167,7 @@ export class FirmasService {
       if (usuarioEmpleador && usuarioEmpleador.email) {
         await this.mailerService.sendMail({
           to: usuarioEmpleador.email,
-          cc: [empleado.email],
+          cc: [empleado.email_laboral],
           subject: "Firma aprobada",
           html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">

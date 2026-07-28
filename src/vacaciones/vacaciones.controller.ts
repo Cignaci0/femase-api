@@ -27,9 +27,24 @@ export class VacacionesController {
     return this.vacacionesService.getDiasDisponibles(numFicha);
   }
 
+  @Get('pendientes')
+  traerPendientes(
+    @Query('empresaId') empresaId?: number,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10
+  ) {
+    return this.vacacionesService.traerPendientes(empresaId, page, limit);
+  }
+
   @Get()
-  findAll(@Query('numFicha') numFicha: string, @Query('fechaInicio') fechaInicio?: Date, @Query('fechaFin') fechaFin?: Date) {
-    return this.vacacionesService.findAll(numFicha, fechaInicio, fechaFin);
+  findAll(
+    @Query('numFicha') numFicha: string, 
+    @Query('fechaInicio') fechaInicio?: Date, 
+    @Query('fechaFin') fechaFin?: Date,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10
+  ) {
+    return this.vacacionesService.findAll(numFicha, fechaInicio, fechaFin, page, limit);
   }
 
   @Post('solicitud')

@@ -26,6 +26,7 @@ export class UsersController {
     return this.userService.crearUsuario(idUsuario, createUserDTO, ip, userAgent);
   }
 
+  @Public()
   @Get('recuperar-clave/:run')
   async recuperar(@Param('run') run: string) {
     return await this.userService.recuperarClave(run);
