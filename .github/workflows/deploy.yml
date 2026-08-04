@@ -1,0 +1,52 @@
+name: Deploy PM2
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - windows
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Instalar dependencias
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Detener PM2
+        continue-on-error: true
+        run: |
+          pm2 kill
+
+      - name: Eliminar procesos Node huérfanos
+        continue-on-error: true
+        run: |
+          Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Compilar
+        run: pnpm run build
+
+      - name: Iniciar aplicación
+        run: |
+          pm2 start ./dist/main.js --name mi-api
+          pm2 save
+
+      - name: Verificar estado
+        run: |
+          pm2 list
