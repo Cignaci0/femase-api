@@ -151,7 +151,50 @@ export class MarcasService {
     return { message: 'Marca creada exitosamente', data: guardar };
   }
 
+  async findMarcasRechazo(fechaInicio?: string, fechaFin?: string) {
+    const whereCondition: any = {
+      num_ficha: '99999999-9A',
+    };
+
+    if (fechaInicio && fechaFin) {
+      whereCondition.fecha_marca = Between(fechaInicio as any, fechaFin as any);
+    }
+
+    return this.marcaRepository.find({
+      where: whereCondition,
+      order: {
+        fecha_marca: 'DESC',
+      },
+      relations: [
+        'dispositivo',
+        'tipo_marca',
+      ],
+      select: {
+        id_marca: true,
+        fecha_marca: true,
+        hora_marca: true,
+        evento: true,
+        hashcode: true,
+        info_adicional: true,
+        comentario: true,
+        num_ficha: true,
+        tipo_marca: {
+          tipo_marca_id: true,
+          nombre: true,
+        },
+        dispositivo: {
+          dispositivo_id: true,
+          nombre: true,
+        },
+      },
+    });
+  }
+
   async findAll(numFicha: string, fechaInicio: string, fechaFin: string) {
+    if (numFicha === '99999999-9A') {
+      return this.findMarcasRechazo(fechaInicio, fechaFin);
+    }
+
     const busqueda = await this.marcaRepository.find({
       where: {
         num_ficha: numFicha,
