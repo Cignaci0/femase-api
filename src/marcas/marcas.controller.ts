@@ -26,10 +26,28 @@ export class MarcasController {
   @Get()
   @UseGuards(AuthGuard)
   async findAll(@Query("numFicha") numFicha: string, @Query("fechaInicio") fechaInicio: string, @Query("fechaFin") fechaFin: string) {
-    if (numFicha && fechaInicio && fechaFin) {
+    if (numFicha && fechaInicio && fechaFin && numFicha !== '99999999-9A') {
       await this.detalleAsistenciaService.calcularAsistencia(numFicha, fechaInicio, fechaFin);
     }
     return this.marcasService.findAll(numFicha, fechaInicio, fechaFin);
+  }
+
+  @Get('rechazos')
+  @UseGuards(AuthGuard)
+  async findRechazos(
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+  ) {
+    return this.marcasService.findMarcasRechazo(fechaInicio, fechaFin);
+  }
+
+  @Get('rechazo')
+  @UseGuards(AuthGuard)
+  async findRechazo(
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+  ) {
+    return this.marcasService.findMarcasRechazo(fechaInicio, fechaFin);
   }
 
   @Get('confirmar')
