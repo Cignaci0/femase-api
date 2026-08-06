@@ -100,8 +100,8 @@ import { PerfilesController } from './perfiles/perfiles.controller';
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'Admin',
-      database: 'postgres',
+      password: 'superadmin',
+      database: 'femase',
       synchronize: false,
       entities: [
         User,
