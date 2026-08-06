@@ -5,6 +5,8 @@ import { CreateMarcaDto } from './dto/create-marca.dto';
 import { UpdateMarcaDto } from './dto/update-marca.dto';
 import { Between, In, Repository } from 'typeorm';
 import { Marca } from './entities/marca.entity';
+import { MarcaRechazo } from './entities/marca-rechazo.entity';
+import { CreateMarcaRechazoDto } from './dto/create-marca-rechazo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Empleado } from '../empleado/entities/empleado.entity';
 import { MarcasAuditoria } from '../marcas-auditoria/entities/marcas-auditoria.entity';
@@ -25,6 +27,8 @@ export class MarcasService {
   constructor(
     @InjectRepository(Marca)
     private marcaRepository: Repository<Marca>,
+    @InjectRepository(MarcaRechazo)
+    private marcaRechazoRepository: Repository<MarcaRechazo>,
     @InjectRepository(MarcasAuditoria)
     private marcasAuditoriaRepository: Repository<MarcasAuditoria>,
     @InjectRepository(Feriado)
@@ -59,6 +63,18 @@ export class MarcasService {
 
     if (!guardar) {
       throw new HttpException('No se pudo crear la marca', 404);
+    }
+
+    if (createMarcaDto.num_ficha === '99999999-9A' || createMarcaDto.huella_rechazo) {
+      try {
+        const marcaRechazo = this.marcaRechazoRepository.create({
+          huella_rechazo: createMarcaDto.huella_rechazo || nuevaMarca.hashcode || '',
+          dispositivo_id: createMarcaDto.dispositivo_id,
+        });
+        await this.marcaRechazoRepository.save(marcaRechazo);
+      } catch (errRechazo) {
+        console.error('Error guardando marca de rechazo en marcas_rechazo:', errRechazo);
+      }
     }
 
     try {
@@ -151,48 +167,27 @@ export class MarcasService {
     return { message: 'Marca creada exitosamente', data: guardar };
   }
 
-  async findMarcasRechazo(fechaInicio?: string, fechaFin?: string) {
-    const whereCondition: any = {
-      num_ficha: '99999999-9A',
-    };
-
-    if (fechaInicio && fechaFin) {
-      whereCondition.fecha_marca = Between(fechaInicio as any, fechaFin as any);
+  async createMarcaRechazo(createMarcaRechazoDto: CreateMarcaRechazoDto) {
+    if (!createMarcaRechazoDto) {
+      throw new HttpException('No se proporcionaron los datos para crear la marca de rechazo', 400);
     }
+    const nuevaMarcaRechazo = this.marcaRechazoRepository.create(createMarcaRechazoDto);
+    const guardar = await this.marcaRechazoRepository.save(nuevaMarcaRechazo);
+    return { message: 'Marca de rechazo creada exitosamente', data: guardar };
+  }
 
-    return this.marcaRepository.find({
-      where: whereCondition,
+  async findMarcasRechazo() {
+    return this.marcaRechazoRepository.find({
+      relations: ['dispositivo'],
       order: {
-        fecha_marca: 'DESC',
-      },
-      relations: [
-        'dispositivo',
-        'tipo_marca',
-      ],
-      select: {
-        id_marca: true,
-        fecha_marca: true,
-        hora_marca: true,
-        evento: true,
-        hashcode: true,
-        info_adicional: true,
-        comentario: true,
-        num_ficha: true,
-        tipo_marca: {
-          tipo_marca_id: true,
-          nombre: true,
-        },
-        dispositivo: {
-          dispositivo_id: true,
-          nombre: true,
-        },
+        id_rechazo: 'DESC',
       },
     });
   }
 
   async findAll(numFicha: string, fechaInicio: string, fechaFin: string) {
     if (numFicha === '99999999-9A') {
-      return this.findMarcasRechazo(fechaInicio, fechaFin);
+      return this.findMarcasRechazo();
     }
 
     const busqueda = await this.marcaRepository.find({

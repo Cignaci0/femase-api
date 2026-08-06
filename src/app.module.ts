@@ -70,6 +70,7 @@ import { Semana } from './semana/entities/semana.entity';
 import { TipoMarca } from './tipo-marcas/entities/tipo-marca.entity';
 import { AsignacionTurnoRotativo } from './asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { Marca } from './marcas/entities/marca.entity';
+import { MarcaRechazo } from './marcas/entities/marca-rechazo.entity';
 import { MarcasAuditoria } from './marcas-auditoria/entities/marcas-auditoria.entity';
 import { Vacaciones } from './vacaciones/entities/vacaciones.entity';
 import { Ausencia } from './ausencias/entities/ausencia.entity';
@@ -90,6 +91,7 @@ import { Huella } from './huellas/entities/huella.entity';
 
 import { PerfilesService } from './perfiles/perfiles.service';
 import { PerfilesController } from './perfiles/perfiles.controller';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -128,6 +130,7 @@ import { PerfilesController } from './perfiles/perfiles.controller';
         TipoMarca,
         AsignacionTurnoRotativo,
         Marca,
+        MarcaRechazo,
         MarcasAuditoria,
         Vacaciones,
         Ausencia,
@@ -207,6 +210,6 @@ import { PerfilesController } from './perfiles/perfiles.controller';
     HuellasModule
   ],
   providers: [PerfilesService],
-  controllers: [PerfilesController],
+  controllers: [PerfilesController, AppController],
 })
 export class AppModule { }
