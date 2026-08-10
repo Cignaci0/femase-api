@@ -107,40 +107,61 @@ export class MarcasService {
           const direccion = empleadoInfo?.empresa.direccion_empresa;
           const comuna = empleadoInfo?.empresa.comuna_empresa;
 
+          const ausenciasQuery = await this.marcaRepository.query(
+            `SELECT a.*, ta.nombre as motivo_ausencia 
+             FROM db_fmc.ausencias a 
+             LEFT JOIN db_fmc.tipo_ausencia ta ON a.motivo_ausencia = ta.id 
+             WHERE a.num_ficha = $1 AND $2 BETWEEN a.fecha_inicio AND a.fecha_fin`,
+            [empleadoInfo.num_ficha, nuevaMarca.fecha_marca]
+          );
+          const ausenciaActual = ausenciasQuery.length > 0 ? ausenciasQuery[0] : null;
+
+          let htmlContent = '';
+
+          if (ausenciaActual) {
+            htmlContent = `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2>Hola ${nombreEmpleado}</h2>
+              <p>Usted marco a las ${nuevaMarca.hora_marca}, pero el dia de hoy posee una ausencia por ${ausenciaActual.motivo_ausencia || 'motivo desconocido'}.</p>
+            </div>`;
+          } else {
+            htmlContent = `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2>Hola, ${nombreEmpleado}</h2>
+              <p>Se ha creado una nueva marca en el sistema con los siguientes detalles:</p>
+              <ul>
+                <li><strong>Fecha:</strong> ${fechaFormatString}</li>
+                <li><strong>Hora:</strong> ${nuevaMarca.hora_marca}</li>
+                <li><strong>Run:</strong> ${this.formatRUN(empleadoInfo.run)}</li>
+                <li><strong>Num ficha:</strong> ${empleadoInfo.num_ficha}</li>
+                <li><strong>Nombre:</strong> ${nombreEmpleado}</li>
+                <li><strong>Evento:</strong> ${eventoNombre}</li>
+                <li><strong>Hashcode:</strong> ${nuevaMarca.hashcode}</li>
+                <li><strong>Dirección Marcación:</strong> ${direccionMarca}</li>
+                
+              </ul>
+              <p>Sistema excepcional de jordana: No Aplica</p>
+              <p>Resolución Exenta: No Aplica</p>
+              <p>Geolocalización: No Aplica</p>
+              <p>Empleador:</p>
+              <ul>
+                <li><strong>Nombre Empresa:</strong> ${nombre_empresa}</li>
+                <li><strong>Rut Empresa:</strong> ${this.formatRUN(rut_empresa)}</li>
+                <li><strong>Dirección Empresa:</strong> ${direccion}</li>
+                <li><strong>Comuna Empresa:</strong> ${comuna}</li>
+              </ul>
+              <p>Empresa Transitoria o Subcontratado: NO APLICA</p>
+              <p>Nombre: NO APLICA</p>
+              <p>Rut: NO APLICA</p>
+              <p>Si no reconoces esta marca o tienes dudas, puedes contactar al administrador.</p>
+            </div>`;
+          }
+
           await this.mailerService.sendMail({
             to: correoEmpleado,
             cc: empleadoInfo.email_noti,
             subject: 'Nueva Marca Registrada',
-            html: `
-          <div style="font-family: Arial, sans-serif; color: #333;">
-            <h2>Hola, ${nombreEmpleado}</h2>
-            <p>Se ha creado una nueva marca en el sistema con los siguientes detalles:</p>
-            <ul>
-              <li><strong>Fecha:</strong> ${fechaFormatString}</li>
-              <li><strong>Hora:</strong> ${nuevaMarca.hora_marca}</li>
-              <li><strong>Run:</strong> ${this.formatRUN(empleadoInfo.run)}</li>
-              <li><strong>Num ficha:</strong> ${empleadoInfo.num_ficha}</li>
-              <li><strong>Nombre:</strong> ${nombreEmpleado}</li>
-              <li><strong>Evento:</strong> ${eventoNombre}</li>
-              <li><strong>Hashcode:</strong> ${nuevaMarca.hashcode}</li>
-              <li><strong>Dirección Marcación:</strong> ${direccionMarca}</li>
-              
-            </ul>
-            <p>Sistema excepcional de jordana: No Aplica</p>
-            <p>Resolución Exenta: No Aplica</p>
-            <p>Geolocalización: No Aplica</p>
-            <p>Empleador:</p>
-            <ul>
-              <li><strong>Nombre Empresa:</strong> ${nombre_empresa}</li>
-              <li><strong>Rut Empresa:</strong> ${this.formatRUN(rut_empresa)}</li>
-              <li><strong>Dirección Empresa:</strong> ${direccion}</li>
-              <li><strong>Comuna Empresa:</strong> ${comuna}</li>
-            </ul>
-            <p>Empresa Transitoria o Subcontratado: NO APLICA</p>
-            <p>Nombre: NO APLICA</p>
-            <p>Rut: NO APLICA</p>
-            <p>Si no reconoces esta marca o tienes dudas, puedes contactar al administrador.</p>
-          </div>`,
+            html: htmlContent,
           });
         }
       }
