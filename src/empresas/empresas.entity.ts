@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Cargo } from 'src/cargos/entities/cargo.entity';
 import { Departamento } from 'src/departamentos/departamento.entity';
+import { Dispositivo } from 'src/dispositivo/entities/dispositivo.entity';
 import { Documento } from 'src/documento/entities/documento.entity';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { Estado } from 'src/estado/estado.entity';
@@ -88,6 +89,9 @@ export class Empresa {
 
   @OneToMany(() => Firma, (firma) => firma.empresa)
   firmas: Firma[];
+
+  @OneToMany(() => Dispositivo, (dispositivo) => dispositivo.empresa)
+  dispositivos: Dispositivo[];
 
   @Column()
   cierre_mes:number;

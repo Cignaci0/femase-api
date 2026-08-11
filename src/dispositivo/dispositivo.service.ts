@@ -1,10 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateDispositivoDto } from './dto/create-dispositivo.dto';
 import { UpdateDispositivoDto } from './dto/update-dispositivo.dto';
 import { In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Dispositivo } from './entities/dispositivo.entity';
-import { SearchDispositivoDto } from './dto/search-dispositivo.dto';
 import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
@@ -22,9 +21,9 @@ export class DispositivoService {
   ) { }
 
   async create(
-    dto: CreateDispositivoDto, 
-    idUsuario: number, 
-    ip: string, 
+    dto: CreateDispositivoDto,
+    idUsuario: number,
+    ip: string,
     userAgent: string
   ) {
     const nuevo = this.dispositivoRepository.create(dto);
@@ -83,16 +82,16 @@ export class DispositivoService {
 
   async findAll() {
     return await this.dispositivoRepository.find({
-      relations: ['cenco', 'estado', 'tipo_dispositivo'],
+      relations: ['cenco', 'estado', 'tipo_dispositivo', 'empresa'],
       order: { dispositivo_id: 'asc' }
     })
   }
 
   async update(
-    id: number, 
-    updateDispositivoDto: UpdateDispositivoDto, 
-    idUsuario: number, 
-    ip: string, 
+    id: number,
+    updateDispositivoDto: UpdateDispositivoDto,
+    idUsuario: number,
+    ip: string,
     userAgent: string
   ): Promise<any> {
     // 1. Buscamos el dispositivo cargando relaciones para el log

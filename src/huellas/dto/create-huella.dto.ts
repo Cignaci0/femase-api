@@ -5,7 +5,7 @@ export class CreateHuellaDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty({ description: 'Huella digital en formato Base64', example: 'dGhlIGZpbmdlcnByaW50IGRhdGE=' })
-  huella_base64: string;
+  huella_xml: string;
 
   @IsString()
   @IsNotEmpty()
@@ -16,4 +16,9 @@ export class CreateHuellaDto {
   @IsNotEmpty()
   @ApiProperty({ description: 'ID del dispositivo donde se capturó la huella', example: 1 })
   dispositivo_id: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({ description: 'Índice de la huella', example: 1 })
+  indice: number;
 }

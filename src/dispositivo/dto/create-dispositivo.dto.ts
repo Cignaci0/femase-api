@@ -62,4 +62,9 @@ export class CreateDispositivoDto {
   @IsNotEmpty()
   @ApiProperty({ description: "ID del tipo de dispositivo", example: 1 })
   tipo_dispositivo_id: number;
+
+  @IsNumber()
+  @IsOptional()
+  @ApiProperty({ description: "ID de la empresa", example: 1 })
+  empresa_id?: number;
 }
