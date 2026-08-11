@@ -8,7 +8,7 @@ export class Huella {
   huella_id: number;
 
   @Column()
-  huella_base64: string;
+  huella_xml: string;
 
   @Column()
   num_ficha: string;
@@ -23,4 +23,7 @@ export class Huella {
   @ManyToOne(() => Dispositivo)
   @JoinColumn({ name: 'dispositivo_id' })
   dispositivo: Dispositivo;
+
+  @Column()
+  indice: number;
 }

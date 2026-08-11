@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Exclude } from "class-transformer";
 import { Cenco } from "src/cencos/cenco.entity";
+import { Empresa } from "src/empresas/empresas.entity";
 import { Estado } from "src/estado/estado.entity";
 import { Marca } from "src/marcas/entities/marca.entity";
 import { TipoDispositivo } from "src/tipo-dispositivo/entities/tipo-dispositivo.entity";
@@ -81,6 +82,14 @@ export class Dispositivo {
   @JoinColumn({ name: 'cenco_id' })
   @ApiProperty({ description: 'cenco_id', example: 22 })
   cenco: Cenco;
+
+  @Column({ nullable: true })
+  @ApiProperty({ description: 'ID de la empresa', example: 1 })
+  empresa_id: number;
+
+  @ManyToOne(() => Empresa, (empresa) => empresa.dispositivos, { nullable: true })
+  @JoinColumn({ name: 'empresa_id' })
+  empresa: Empresa;
 
   @OneToMany(() => Marca, (marca) => marca.dispositivo)
   marcas: Marca[];

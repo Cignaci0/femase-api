@@ -25,6 +25,11 @@ export class HuellasController {
     return this.huellasService.findAll(numFicha, dispositivo_id);
   }
 
+  @Get('dispositivo/:dispositivo_id')
+  findByDispositivo(@Param('dispositivo_id', ParseIntPipe) dispositivoId: number) {
+    return this.huellasService.findByDispositivo(dispositivoId);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.huellasService.findOne(id);

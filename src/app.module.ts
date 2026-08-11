@@ -45,6 +45,7 @@ import { RegistroConexionesModule } from './registro_conexiones/registro_conexio
 import { HorasCompensacionModule } from './horas_compensacion/horas_compensacion.module';
 import { SolicitudHorasCompensacionModule } from './solicitud_horas_compensacion/solicitud_horas_compensacion.module';
 import { HuellasModule } from './huellas/huellas.module';
+import { TareasHuellasModule } from './tareas-huellas/tareas-huellas.module';
 
 import { User } from './users/user.entity';
 import { Perfil } from './perfiles/perfil.entity';
@@ -70,6 +71,7 @@ import { Semana } from './semana/entities/semana.entity';
 import { TipoMarca } from './tipo-marcas/entities/tipo-marca.entity';
 import { AsignacionTurnoRotativo } from './asignacion_turno_rotativo/entities/asignacion_turno_rotativo.entity';
 import { Marca } from './marcas/entities/marca.entity';
+import { MarcaRechazo } from './marcas/entities/marca-rechazo.entity';
 import { MarcasAuditoria } from './marcas-auditoria/entities/marcas-auditoria.entity';
 import { Vacaciones } from './vacaciones/entities/vacaciones.entity';
 import { Ausencia } from './ausencias/entities/ausencia.entity';
@@ -87,9 +89,11 @@ import { RegistroEvento } from './registro_evento/entities/registro_evento.entit
 import { HorasCompensacion } from './horas_compensacion/entities/horas_compensacion.entity';
 import { SolicitudHorasCompensacion } from './solicitud_horas_compensacion/entities/solicitud_horas_compensacion.entity';
 import { Huella } from './huellas/entities/huella.entity';
+import { TareaHuella } from './tareas-huellas/entities/tarea-huella.entity';
 
 import { PerfilesService } from './perfiles/perfiles.service';
 import { PerfilesController } from './perfiles/perfiles.controller';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -128,6 +132,7 @@ import { PerfilesController } from './perfiles/perfiles.controller';
         TipoMarca,
         AsignacionTurnoRotativo,
         Marca,
+        MarcaRechazo,
         MarcasAuditoria,
         Vacaciones,
         Ausencia,
@@ -144,7 +149,8 @@ import { PerfilesController } from './perfiles/perfiles.controller';
         RegistroEvento,
         HorasCompensacion,
         SolicitudHorasCompensacion,
-        Huella
+        Huella,
+        TareaHuella
       ]
     }),
     MailerModule.forRoot({
@@ -204,9 +210,10 @@ import { PerfilesController } from './perfiles/perfiles.controller';
     RegistroConexionesModule,
     HorasCompensacionModule,
     SolicitudHorasCompensacionModule,
-    HuellasModule
+    HuellasModule,
+    TareasHuellasModule
   ],
   providers: [PerfilesService],
-  controllers: [PerfilesController],
+  controllers: [PerfilesController, AppController],
 })
 export class AppModule { }

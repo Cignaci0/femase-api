@@ -10,14 +10,14 @@ export class HuellasService {
   constructor(
     @InjectRepository(Huella)
     private readonly huellaRepository: Repository<Huella>,
-  ) {}
+  ) { }
 
   async create(createHuellaDto: CreateHuellaDto): Promise<Huella> {
     const nuevaHuella = this.huellaRepository.create(createHuellaDto);
     return await this.huellaRepository.save(nuevaHuella);
   }
 
-  async findAll(num_ficha?: string, dispositivo_id?: number): Promise<Huella[]> {
+  async findAll(num_ficha?: string, dispositivo_id?: number) {
     const where: any = {};
 
     if (num_ficha) {
@@ -28,10 +28,37 @@ export class HuellasService {
       where.dispositivo_id = dispositivo_id;
     }
 
-    return await this.huellaRepository.find({
+    const huellas = await this.huellaRepository.find({
       where,
-      relations: ['empleado', 'dispositivo'],
     });
+
+    const grupos: { [num_ficha: string]: { huellas: { indice: number; huella_xml: string; dispositivo_id: number }[]; dispositivo_id: number } } = {};
+
+    for (const h of huellas) {
+      const ficha = h.num_ficha || '';
+      if (!grupos[ficha]) {
+        grupos[ficha] = {
+          dispositivo_id: h.dispositivo_id,
+          huellas: [],
+        };
+      }
+      grupos[ficha].huellas.push({
+        indice: h.indice,
+        huella_xml: h.huella_xml,
+        dispositivo_id: h.dispositivo_id,
+      });
+    }
+
+    return Object.entries(grupos).map(([ficha, data]) => ({
+      num_ficha: ficha,
+      cantidad_huellas: data.huellas.length,
+      dispositivo_id: data.dispositivo_id,
+      huellas: data.huellas,
+    }));
+  }
+
+  async findByDispositivo(dispositivo_id: number) {
+    return this.findAll(undefined, dispositivo_id);
   }
 
   async findOne(id: number): Promise<Huella> {

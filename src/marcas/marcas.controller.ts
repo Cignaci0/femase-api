@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, UseGuards, Ip, Headers } from '@nestjs/common';
 import { MarcasService } from './marcas.service';
 import { CreateMarcaDto } from './dto/create-marca.dto';
+import { CreateMarcaRechazoDto } from './dto/create-marca-rechazo.dto';
 import { UpdateMarcaDto } from './dto/update-marca.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { DetalleAsistenciaService } from 'src/detalle-asistencia/detalle-asistencia.service';
@@ -23,6 +24,11 @@ export class MarcasController {
     return this.marcasService.create(createMarcaDto, idUsuario, ip, userAgent);
   }
 
+  @Post('rechazo')
+  createRechazo(@Body() createMarcaRechazoDto: CreateMarcaRechazoDto) {
+    return this.marcasService.createMarcaRechazo(createMarcaRechazoDto);
+  }
+
   @Get()
   @UseGuards(AuthGuard)
   async findAll(@Query("numFicha") numFicha: string, @Query("fechaInicio") fechaInicio: string, @Query("fechaFin") fechaFin: string) {
@@ -34,20 +40,14 @@ export class MarcasController {
 
   @Get('rechazos')
   @UseGuards(AuthGuard)
-  async findRechazos(
-    @Query('fechaInicio') fechaInicio?: string,
-    @Query('fechaFin') fechaFin?: string,
-  ) {
-    return this.marcasService.findMarcasRechazo(fechaInicio, fechaFin);
+  async findRechazos() {
+    return this.marcasService.findMarcasRechazo();
   }
 
   @Get('rechazo')
   @UseGuards(AuthGuard)
-  async findRechazo(
-    @Query('fechaInicio') fechaInicio?: string,
-    @Query('fechaFin') fechaFin?: string,
-  ) {
-    return this.marcasService.findMarcasRechazo(fechaInicio, fechaFin);
+  async findRechazo() {
+    return this.marcasService.findMarcasRechazo();
   }
 
   @Get('confirmar')

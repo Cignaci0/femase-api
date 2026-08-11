@@ -46,4 +46,9 @@ export class CreateMarcaDto {
   @IsOptional()
   @ApiProperty({ description: 'Comentario', example: 'Comentario' })
   comentario?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({ description: 'Huella de rechazo', example: 'abc123huella' })
+  huella_rechazo?: string;
 }
