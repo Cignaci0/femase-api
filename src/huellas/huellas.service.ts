@@ -57,6 +57,77 @@ export class HuellasService {
     }));
   }
 
+  async findAllPagination(
+    page: number = 1,
+    limit: number = 10,
+    num_ficha?: string,
+    dispositivo_id?: number,
+  ) {
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (num_ficha) {
+      where.num_ficha = num_ficha;
+    }
+
+    if (dispositivo_id) {
+      where.dispositivo_id = dispositivo_id;
+    }
+
+    const [huellas, total] = await this.huellaRepository.findAndCount({
+      where,
+      order: {
+        num_ficha: 'ASC',
+        indice: 'ASC',
+      },
+      take: limit,
+      skip: skip,
+    });
+
+    const grupos: {
+      [num_ficha: string]: {
+        huellas: {
+          indice: number;
+          huella_xml: string;
+          dispositivo_id: number;
+        }[];
+        dispositivo_id: number;
+      };
+    } = {};
+
+    for (const h of huellas) {
+      const ficha = h.num_ficha || '';
+
+      if (!grupos[ficha]) {
+        grupos[ficha] = {
+          dispositivo_id: h.dispositivo_id,
+          huellas: [],
+        };
+      }
+
+      grupos[ficha].huellas.push({
+        indice: h.indice,
+        huella_xml: h.huella_xml,
+        dispositivo_id: h.dispositivo_id,
+      });
+    }
+
+    const data = Object.entries(grupos).map(([ficha, data]) => ({
+      num_ficha: ficha,
+      cantidad_huellas: data.huellas.length,
+      dispositivo_id: data.dispositivo_id,
+      huellas: data.huellas,
+    }));
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
+  }
+
   async findByDispositivo(dispositivo_id: number) {
     return this.findAll(undefined, dispositivo_id);
   }

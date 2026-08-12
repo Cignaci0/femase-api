@@ -40,14 +40,14 @@ export class MarcasController {
 
   @Get('rechazos')
   @UseGuards(AuthGuard)
-  async findRechazos() {
-    return this.marcasService.findMarcasRechazo();
+  async findRechazos(@Query('page') page: string = '1', @Query('limit') limit: string = '10') {
+    return await this.marcasService.findMarcasRechazo(parseInt(page, 10), parseInt(limit, 10));
   }
 
   @Get('rechazo')
   @UseGuards(AuthGuard)
-  async findRechazo() {
-    return this.marcasService.findMarcasRechazo();
+  async findRechazo(@Query('page') page: string = '1', @Query('limit') limit: string = '10') {
+    return await this.marcasService.findMarcasRechazo(parseInt(page, 10), parseInt(limit, 10));
   }
 
   @Get('confirmar')
