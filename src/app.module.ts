@@ -104,7 +104,7 @@ import { AppController } from './app.controller';
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'superadmin',
+      password: "superadmin",
       database: 'femase',
       synchronize: false,
       entities: [

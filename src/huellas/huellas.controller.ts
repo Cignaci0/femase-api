@@ -7,7 +7,7 @@ import { ApiQuery, ApiTags } from '@nestjs/swagger';
 @ApiTags('huellas')
 @Controller('huellas')
 export class HuellasController {
-  constructor(private readonly huellasService: HuellasService) {}
+  constructor(private readonly huellasService: HuellasService) { }
 
   @Post()
   create(@Body() createHuellaDto: CreateHuellaDto) {
