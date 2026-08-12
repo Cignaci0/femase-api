@@ -176,20 +176,33 @@ export class MarcasService {
     return { message: 'Marca de rechazo creada exitosamente', data: guardar };
   }
 
-  async findMarcasRechazo() {
-    return this.marcaRechazoRepository.find({
-      relations: ['dispositivo'],
+  async findMarcasRechazo(page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.marcaRechazoRepository.findAndCount({
       order: {
         id_rechazo: 'DESC',
       },
+      take: limit,
+      skip: skip,
+      select: {
+        id_rechazo: true,
+        dispositivo_id: true,
+        fecha: true,
+        hora: true,
+        huella_rechazo: true
+      }
     });
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
-  async findAll(numFicha: string, fechaInicio: string, fechaFin: string) {
-    if (numFicha === '99999999-9A') {
-      return this.findMarcasRechazo();
-    }
-
+  async findAll(numFicha: string, fechaInicio: string, fechaFin: string, page: number = 1, limit: number = 10) {
     const busqueda = await this.marcaRepository.find({
       where: {
         num_ficha: numFicha,

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { HuellasService } from './huellas.service';
 import { CreateHuellaDto } from './dto/create-huella.dto';
 import { UpdateHuellaDto } from './dto/update-huella.dto';
@@ -7,7 +7,7 @@ import { ApiQuery, ApiTags } from '@nestjs/swagger';
 @ApiTags('huellas')
 @Controller('huellas')
 export class HuellasController {
-  constructor(private readonly huellasService: HuellasService) {}
+  constructor(private readonly huellasService: HuellasService) { }
 
   @Post()
   create(@Body() createHuellaDto: CreateHuellaDto) {
@@ -30,11 +30,6 @@ export class HuellasController {
     return this.huellasService.findByDispositivo(dispositivoId);
   }
 
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.huellasService.findOne(id);
-  }
-
   @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() updateHuellaDto: UpdateHuellaDto) {
     return this.huellasService.update(id, updateHuellaDto);
@@ -43,5 +38,11 @@ export class HuellasController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.huellasService.remove(id);
+  }
+
+  @Get('pagination')
+  async findAllPagination(@Query('page') page: string = '1', @Query('limit') limit: string = '10', @Query('num_ficha') num_ficha?: string, @Query('dispositivo_id') dispositivo_id?: string) {
+    const dispositivo_id_num = dispositivo_id ? Number(dispositivo_id) : undefined;
+    return await this.huellasService.findAllPagination(parseInt(page, 10), parseInt(limit, 10), num_ficha, dispositivo_id_num);
   }
 }
