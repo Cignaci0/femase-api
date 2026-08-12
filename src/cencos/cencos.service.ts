@@ -11,6 +11,7 @@ import { Empleado } from 'src/empleado/entities/empleado.entity';
 import { User } from 'src/users/user.entity';
 import { RegistroEvento } from 'src/registro_evento/entities/registro_evento.entity';
 import { Departamento } from 'src/departamentos/departamento.entity';
+import { Dispositivo } from 'src/dispositivo/entities/dispositivo.entity';
 import { generarTextoCambios, cloneEntity } from 'src/utils/audit.utils';
 const UAParser = require('ua-parser-js');
 
@@ -118,6 +119,47 @@ export class CencosService {
 
     // 2. Mezclamos los datos nuevos
     this.cencoRepository.merge(cenco, updateDto);
+
+    // --- LOGICA DE EMPRESA_ID PARA DISPOSITIVOS ---
+    if (updateDto.departamento_id && updateDto.departamento_id !== cencoAntiguo.departamento?.departamento_id) {
+      const nuevoDepto = await this.cencoRepository.manager.findOne(Departamento, {
+        where: { departamento_id: updateDto.departamento_id },
+        relations: ['empresa']
+      });
+      if (nuevoDepto) {
+        cenco.departamento = nuevoDepto;
+      }
+    }
+
+    if (updateDto.dispositivos) {
+      // 1. Identificar dispositivos que están actualmente en la BD para este Cenco pero que no vienen en el nuevo listado
+      const nuevosIds = updateDto.dispositivos.map((d: any) => d.dispositivo_id);
+      const qb = this.cencoRepository.manager.createQueryBuilder(Dispositivo, 'd')
+        .where('d.cenco_id = :id', { id });
+      
+      if (nuevosIds.length > 0) {
+        qb.andWhere('d.dispositivo_id NOT IN (:...nuevosIds)', { nuevosIds });
+      }
+
+      const desasignados = await qb.getMany();
+      
+      // 2. A los que se desvinculan, se les remueve el cenco y el empresa_id
+      if (desasignados.length > 0) {
+        await this.cencoRepository.manager.update(Dispositivo,
+          { dispositivo_id: In(desasignados.map(d => d.dispositivo_id)) },
+          { cenco: null, empresa_id: null }
+        );
+      }
+
+      // 3. A los que quedan/nuevos, inyectarles el empresa_id correcto
+      const empresaId = cenco.departamento?.empresa?.empresa_id || null;
+      if (cenco.dispositivos) {
+        cenco.dispositivos.forEach(d => {
+          d.empresa_id = empresaId;
+        });
+      }
+    }
+    // ----------------------------------------------
 
     if (updateDto.email_notificacion) {
       await this.cencoRepository.manager.update(Empleado, { cenco: { cenco_id: id } }, { email_noti: updateDto.email_notificacion })

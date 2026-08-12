@@ -40,14 +40,38 @@ export class MarcasController {
 
   @Get('rechazos')
   @UseGuards(AuthGuard)
-  async findRechazos(@Query('page') page: string = '1', @Query('limit') limit: string = '10') {
-    return await this.marcasService.findMarcasRechazo(parseInt(page, 10), parseInt(limit, 10));
+  async findRechazos(
+    @Query('page') page: string = '1', 
+    @Query('limit') limit: string = '1000',
+    @Query('empresaId') empresaId?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string
+  ) {
+    return await this.marcasService.findMarcasRechazo(
+      parseInt(page, 10), 
+      parseInt(limit, 10),
+      empresaId ? parseInt(empresaId, 10) : undefined,
+      fechaInicio,
+      fechaFin
+    );
   }
 
   @Get('rechazo')
   @UseGuards(AuthGuard)
-  async findRechazo(@Query('page') page: string = '1', @Query('limit') limit: string = '10') {
-    return await this.marcasService.findMarcasRechazo(parseInt(page, 10), parseInt(limit, 10));
+  async findRechazo(
+    @Query('page') page: string = '1', 
+    @Query('limit') limit: string = '10',
+    @Query('empresaId') empresaId?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string
+  ) {
+    return await this.marcasService.findMarcasRechazo(
+      parseInt(page, 10), 
+      parseInt(limit, 10),
+      empresaId ? parseInt(empresaId, 10) : undefined,
+      fechaInicio,
+      fechaFin
+    );
   }
 
   @Get('confirmar')

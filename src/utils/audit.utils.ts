@@ -33,7 +33,11 @@ export const cloneEntity = (entity: any) => {
   const clone = { ...entity };
   for (const key in clone) {
     if (clone[key] && typeof clone[key] === 'object' && !(clone[key] instanceof Date)) {
-      clone[key] = { ...clone[key] };
+      if (Array.isArray(clone[key])) {
+        clone[key] = [...clone[key]];
+      } else {
+        clone[key] = { ...clone[key] };
+      }
     }
   }
   return clone;

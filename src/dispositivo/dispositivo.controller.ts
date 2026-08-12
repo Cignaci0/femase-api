@@ -41,4 +41,9 @@ export class DispositivoController {
   buscarPorEmpleado(@Param('rut') rut: string) {
     return this.dispositivoService.buscarDispositivosPorEmpleado(rut);
   }
+
+  @Get('empresa/:empresaId')
+  buscarPorEmpresa(@Param('empresaId') empresaId: string) {
+    return this.dispositivoService.buscarPorEmpresa(parseInt(empresaId));
+  }
 }

@@ -197,23 +197,30 @@ export class MarcasService {
     return { message: 'Marca de rechazo creada exitosamente', data: guardar };
   }
 
-  async findMarcasRechazo(page: number = 1, limit: number = 10) {
+  async findMarcasRechazo(page: number = 1, limit: number = 10, empresaId?: number, fechaInicio?: string, fechaFin?: string) {
     const skip = (page - 1) * limit;
 
-    const [data, total] = await this.marcaRechazoRepository.findAndCount({
-      order: {
-        id_rechazo: 'DESC',
-      },
-      take: limit,
-      skip: skip,
-      select: {
-        id_rechazo: true,
-        dispositivo_id: true,
-        fecha: true,
-        hora: true,
-        huella_rechazo: true
-      }
-    });
+    const qb = this.marcaRechazoRepository.createQueryBuilder('rechazo')
+      .leftJoinAndSelect('rechazo.dispositivo', 'dispositivo')
+      .leftJoin('dispositivo.cenco', 'cenco')
+      .leftJoin('cenco.departamento', 'departamento')
+      .orderBy('rechazo.id_rechazo', 'DESC')
+      .take(limit)
+      .skip(skip);
+
+    if (empresaId) {
+      qb.andWhere('(dispositivo.empresa_id = :empresaId OR departamento.empresa_id = :empresaId)', { empresaId });
+    }
+
+    if (fechaInicio && fechaFin) {
+      qb.andWhere('rechazo.fecha BETWEEN :fechaInicio AND :fechaFin', { fechaInicio, fechaFin });
+    } else if (fechaInicio) {
+      qb.andWhere('rechazo.fecha >= :fechaInicio', { fechaInicio });
+    } else if (fechaFin) {
+      qb.andWhere('rechazo.fecha <= :fechaFin', { fechaFin });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
 
     return {
       data,

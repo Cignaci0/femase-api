@@ -78,18 +78,18 @@ export class Dispositivo {
   @ApiProperty({ description: 'nombre', example: 'ADMINISTRACION_CENTRAL' })
   nombre: string;
 
-  @ManyToOne(() => Cenco, (cenco) => cenco.dispositivos)
+  @ManyToOne(() => Cenco, (cenco) => cenco.dispositivos, { nullable: true })
   @JoinColumn({ name: 'cenco_id' })
   @ApiProperty({ description: 'cenco_id', example: 22 })
-  cenco: Cenco;
+  cenco: Cenco | null;
 
   @Column({ nullable: true })
   @ApiProperty({ description: 'ID de la empresa', example: 1 })
-  empresa_id: number;
+  empresa_id: number | null;
 
   @ManyToOne(() => Empresa, (empresa) => empresa.dispositivos, { nullable: true })
   @JoinColumn({ name: 'empresa_id' })
-  empresa: Empresa;
+  empresa: Empresa | null;
 
   @OneToMany(() => Marca, (marca) => marca.dispositivo)
   marcas: Marca[];

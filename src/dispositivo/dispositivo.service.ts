@@ -27,6 +27,27 @@ export class DispositivoService {
     userAgent: string
   ) {
     const nuevo = this.dispositivoRepository.create(dto);
+
+    // --- ASIGNAR EMPRESA DESDE CENCO ---
+    const cencoInput = (dto as any).cenco ?? (dto as any).centro_id ?? (dto as any).cenco_id;
+    if (cencoInput !== undefined) {
+      if (cencoInput) {
+        const cencoIdValue = typeof cencoInput === 'object' ? cencoInput.cenco_id : cencoInput;
+        const cencoRel = await this.dispositivoRepository.manager.findOne(Cenco, {
+          where: { cenco_id: cencoIdValue },
+          relations: ['departamento', 'departamento.empresa']
+        });
+        if (cencoRel) {
+          nuevo.cenco = cencoRel;
+          nuevo.empresa_id = cencoRel.departamento?.empresa?.empresa_id || null;
+        }
+      } else {
+        nuevo.cenco = null;
+        nuevo.empresa_id = null;
+      }
+    }
+    // -----------------------------------
+
     const guardado = await this.dispositivoRepository.save(nuevo);
 
     // --- AUDITORÍA ---
@@ -109,6 +130,26 @@ export class DispositivoService {
     // 2. Mezclamos los datos nuevos
     this.dispositivoRepository.merge(dispositivo, updateDispositivoDto);
 
+    // --- ASIGNAR EMPRESA DESDE CENCO ---
+    const cencoInput = (updateDispositivoDto as any).cenco ?? (updateDispositivoDto as any).centro_id ?? (updateDispositivoDto as any).cenco_id;
+    if (cencoInput !== undefined) {
+      if (cencoInput) {
+        const cencoIdValue = typeof cencoInput === 'object' ? cencoInput.cenco_id : cencoInput;
+        const cencoRel = await this.dispositivoRepository.manager.findOne(Cenco, {
+          where: { cenco_id: cencoIdValue },
+          relations: ['departamento', 'departamento.empresa']
+        });
+        if (cencoRel) {
+          dispositivo.cenco = cencoRel;
+          dispositivo.empresa_id = cencoRel.departamento?.empresa?.empresa_id || null;
+        }
+      } else {
+        dispositivo.cenco = null;
+        dispositivo.empresa_id = null;
+      }
+    }
+    // -----------------------------------
+
     try {
       const actualizada = await this.dispositivoRepository.save(dispositivo);
 
@@ -189,6 +230,17 @@ export class DispositivoService {
     });
 
     return dispositivos;
+  }
+
+  async buscarPorEmpresa(empresaId: number) {
+    return await this.dispositivoRepository.find({
+      where: [
+        { empresa: { empresa_id: empresaId } },
+        { cenco: { departamento: { empresa: { empresa_id: empresaId } } } }
+      ],
+      relations: ['cenco', 'cenco.departamento', 'cenco.departamento.empresa', 'estado', 'tipo_dispositivo', 'empresa'],
+      order: { dispositivo_id: 'asc' }
+    });
   }
 
 

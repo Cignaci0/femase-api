@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CreateHuellaDto } from './dto/create-huella.dto';
 import { UpdateHuellaDto } from './dto/update-huella.dto';
 import { Huella } from './entities/huella.entity';
+import { Empleado } from 'src/empleado/entities/empleado.entity';
+import { TareaHuella } from 'src/tareas-huellas/entities/tarea-huella.entity';
 
 @Injectable()
 export class HuellasService {
@@ -17,22 +19,54 @@ export class HuellasService {
     return await this.huellaRepository.save(nuevaHuella);
   }
 
-  async findAll(num_ficha?: string, dispositivo_id?: number) {
-    const where: any = {};
+  async pagination(page: number = 1, query: string = '', limit: number = 10, empresaId?: number) {
+    const skip = (page - 1) * limit;
 
-    if (num_ficha) {
-      where.num_ficha = num_ficha;
+    let numFichasValidos: string[] | null = null;
+    
+    if (empresaId) {
+      const empleados = await this.huellaRepository.manager
+        .createQueryBuilder(Empleado, 'empleado')
+        .select('empleado.num_ficha', 'num_ficha')
+        .where('empleado.empresa_id = :empresaId', { empresaId })
+        .getRawMany();
+        
+      numFichasValidos = empleados.map(e => e.num_ficha);
+      
+      if (numFichasValidos.length === 0) {
+        return { data: [], total: 0, page, lastPage: 0 };
+      }
     }
 
-    if (dispositivo_id) {
-      where.dispositivo_id = dispositivo_id;
+    const qbFichas = this.huellaRepository.createQueryBuilder('huella')
+      .select('DISTINCT huella.num_ficha', 'num_ficha')
+      .orderBy('huella.num_ficha', 'ASC');
+
+    if (query) {
+      qbFichas.andWhere('huella.num_ficha LIKE :query', { query: `%${query}%` });
+    }
+
+    if (numFichasValidos) {
+      qbFichas.andWhere('huella.num_ficha IN (:...fichas)', { fichas: numFichasValidos });
+    }
+
+    const totalFichasQuery = await qbFichas.getRawMany();
+    const total = totalFichasQuery.length;
+
+    qbFichas.limit(limit).offset(skip);
+    const fichasPaginadas = await qbFichas.getRawMany();
+    const fichasToFetch = fichasPaginadas.map(f => f.num_ficha);
+
+    if (fichasToFetch.length === 0) {
+      return { data: [], total, page, lastPage: Math.ceil(total / limit) };
     }
 
     const huellas = await this.huellaRepository.find({
-      where,
+      where: { num_ficha: In(fichasToFetch) },
+      order: { num_ficha: 'ASC', indice: 'ASC' }
     });
 
-    const grupos: { [num_ficha: string]: { huellas: { indice: number; huella_xml: string; dispositivo_id: number }[]; dispositivo_id: number } } = {};
+    const grupos: { [num_ficha: string]: { huellas: any[]; dispositivo_id: number } } = {};
 
     for (const h of huellas) {
       const ficha = h.num_ficha || '';
@@ -43,70 +77,7 @@ export class HuellasService {
         };
       }
       grupos[ficha].huellas.push({
-        indice: h.indice,
-        huella_xml: h.huella_xml,
-        dispositivo_id: h.dispositivo_id,
-      });
-    }
-
-    return Object.entries(grupos).map(([ficha, data]) => ({
-      num_ficha: ficha,
-      cantidad_huellas: data.huellas.length,
-      dispositivo_id: data.dispositivo_id,
-      huellas: data.huellas,
-    }));
-  }
-
-  async findAllPagination(
-    page: number = 1,
-    limit: number = 10,
-    num_ficha?: string,
-    dispositivo_id?: number,
-  ) {
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-
-    if (num_ficha) {
-      where.num_ficha = num_ficha;
-    }
-
-    if (dispositivo_id) {
-      where.dispositivo_id = dispositivo_id;
-    }
-
-    const [huellas, total] = await this.huellaRepository.findAndCount({
-      where,
-      order: {
-        num_ficha: 'ASC',
-        indice: 'ASC',
-      },
-      take: limit,
-      skip: skip,
-    });
-
-    const grupos: {
-      [num_ficha: string]: {
-        huellas: {
-          indice: number;
-          huella_xml: string;
-          dispositivo_id: number;
-        }[];
-        dispositivo_id: number;
-      };
-    } = {};
-
-    for (const h of huellas) {
-      const ficha = h.num_ficha || '';
-
-      if (!grupos[ficha]) {
-        grupos[ficha] = {
-          dispositivo_id: h.dispositivo_id,
-          huellas: [],
-        };
-      }
-
-      grupos[ficha].huellas.push({
+        huella_id: h.huella_id,
         indice: h.indice,
         huella_xml: h.huella_xml,
         dispositivo_id: h.dispositivo_id,
@@ -129,7 +100,32 @@ export class HuellasService {
   }
 
   async findByDispositivo(dispositivo_id: number) {
-    return this.findAll(undefined, dispositivo_id);
+    const huellas = await this.huellaRepository.find({
+      where: { dispositivo_id },
+      relations: ['empleado', 'empleado.empresa'],
+    });
+
+    const grupos: { [num_ficha: string]: { huellas: any[]; dispositivo_id: number } } = {};
+
+    for (const h of huellas) {
+      const ficha = h.num_ficha || '';
+      if (!grupos[ficha]) {
+        grupos[ficha] = { dispositivo_id: h.dispositivo_id, huellas: [] };
+      }
+      grupos[ficha].huellas.push({
+        huella_id: h.huella_id,
+        indice: h.indice,
+        huella_xml: h.huella_xml,
+        dispositivo_id: h.dispositivo_id,
+      });
+    }
+
+    return Object.entries(grupos).map(([ficha, data]) => ({
+      num_ficha: ficha,
+      cantidad_huellas: data.huellas.length,
+      dispositivo_id: data.dispositivo_id,
+      huellas: data.huellas,
+    }));
   }
 
   async findOne(id: number): Promise<Huella> {
@@ -151,9 +147,5 @@ export class HuellasService {
     return await this.huellaRepository.save(huella);
   }
 
-  async remove(id: number): Promise<{ message: string }> {
-    const huella = await this.findOne(id);
-    await this.huellaRepository.remove(huella);
-    return { message: `Huella #${id} eliminada exitosamente` };
-  }
+
 }
