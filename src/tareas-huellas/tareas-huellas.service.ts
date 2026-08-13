@@ -9,25 +9,20 @@ export class TareasHuellasService {
   constructor(
     @InjectRepository(TareaHuella)
     private readonly tareaHuellaRepository: Repository<TareaHuella>,
-  ) {}
+  ) { }
 
   async create(createDto: CreateTareaHuellaDto) {
-    const { huella, huellas, dispositivo_id, num_ficha, estado } = createDto;
+    const { huellas, dispositivo_id, num_ficha, estado } = createDto;
     const estadoInicial = estado || 'NP';
 
-    const huellasAProcesar: string[] = [];
-
-    if (huellas && Array.isArray(huellas) && huellas.length > 0) {
-      huellasAProcesar.push(...huellas);
-    } else if (huella) {
-      huellasAProcesar.push(huella);
-    } else {
-      throw new BadRequestException('Debe proporcionar al menos una huella en "huella" o "huellas"');
+    if (!huellas || huellas.length === 0) {
+      throw new BadRequestException('Debe proporcionar al menos una huella en "huellas"');
     }
 
-    const nuevasTareas = huellasAProcesar.map((itemHuella) =>
+    const nuevasTareas = huellas.map((item) =>
       this.tareaHuellaRepository.create({
-        huella: itemHuella,
+        huella: item.huella,
+        indice: item.indice,
         dispositivo_id,
         num_ficha,
         estado: estadoInicial,
@@ -36,13 +31,22 @@ export class TareasHuellasService {
 
     const guardadas = await this.tareaHuellaRepository.save(nuevasTareas);
 
+    // Devolver en el mismo formato agrupado
     return {
       message: `${guardadas.length} tarea(s) de huella registrada(s) exitosamente`,
-      data: guardadas,
+      data: {
+        dispositivo_id,
+        num_ficha,
+        estado: estadoInicial,
+        huellas: guardadas.map((t) => ({
+          huella: t.huella,
+          indice: t.indice,
+        })),
+      },
     };
   }
 
-  async findAll(dispositivo_id?: number, num_ficha?: string, estado?: string): Promise<TareaHuella[]> {
+  async findAll(dispositivo_id?: number, num_ficha?: string, estado?: string) {
     const where: any = {};
 
     if (dispositivo_id) {
@@ -57,11 +61,33 @@ export class TareasHuellasService {
       where.estado = estado;
     }
 
-    return await this.tareaHuellaRepository.find({
+    const tareas = await this.tareaHuellaRepository.find({
       where,
-      relations: ['dispositivo', 'empleado'],
       order: { tarea_id: 'ASC' },
     });
+
+    // Agrupar por num_ficha + dispositivo_id
+    const grupos = new Map<string, any>();
+
+    for (const t of tareas) {
+      const key = `${t.num_ficha}__${t.dispositivo_id}`;
+
+      if (!grupos.has(key)) {
+        grupos.set(key, {
+          dispositivo_id: t.dispositivo_id,
+          num_ficha: t.num_ficha,
+          estado: t.estado,
+          huellas: [],
+        });
+      }
+
+      grupos.get(key).huellas.push({
+        huella: t.huella,
+        indice: t.indice,
+      });
+    }
+
+    return Array.from(grupos.values());
   }
 
   async findOne(id: number): Promise<TareaHuella> {
