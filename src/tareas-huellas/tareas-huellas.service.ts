@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TareaHuella } from './entities/tarea-huella.entity';
@@ -15,14 +15,13 @@ export class TareasHuellasService {
     const { huellas, dispositivo_id, num_ficha, estado } = createDto;
     const estadoInicial = estado || 'NP';
 
-    if (!huellas || huellas.length === 0) {
-      throw new BadRequestException('Debe proporcionar al menos una huella en "huellas"');
-    }
+    // Si no vienen huellas, crear una sola tarea sin huella
+    const huellasAProcesar = huellas && huellas.length > 0 ? huellas : [{ huella: null, indice: null }];
 
-    const nuevasTareas = huellas.map((item) =>
+    const nuevasTareas = huellasAProcesar.map((item) =>
       this.tareaHuellaRepository.create({
-        huella: item.huella,
-        indice: item.indice,
+        huella: item.huella ?? null,
+        indice: item.indice ?? null,
         dispositivo_id,
         num_ficha,
         estado: estadoInicial,
@@ -31,7 +30,6 @@ export class TareasHuellasService {
 
     const guardadas = await this.tareaHuellaRepository.save(nuevasTareas);
 
-    // Devolver en el mismo formato agrupado
     return {
       message: `${guardadas.length} tarea(s) de huella registrada(s) exitosamente`,
       data: {
@@ -39,6 +37,7 @@ export class TareasHuellasService {
         num_ficha,
         estado: estadoInicial,
         huellas: guardadas.map((t) => ({
+          tarea_id: t.tarea_id,
           huella: t.huella,
           indice: t.indice,
         })),
@@ -82,6 +81,7 @@ export class TareasHuellasService {
       }
 
       grupos.get(key).huellas.push({
+        tarea_id: t.tarea_id,
         huella: t.huella,
         indice: t.indice,
       });

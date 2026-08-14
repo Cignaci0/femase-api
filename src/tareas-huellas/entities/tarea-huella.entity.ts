@@ -13,9 +13,9 @@ export class TareaHuella {
   @ApiProperty({ description: 'Índice/posición del dedo de la huella', example: 0, required: false })
   indice: number;
 
-  @Column({ type: 'text' })
-  @ApiProperty({ description: 'Huella en formato XML', example: '<xml>...</xml>' })
-  huella: string;
+  @Column({ type: 'text', nullable: true })
+  @ApiProperty({ description: 'Huella en formato XML', example: '<xml>...</xml>', required: false })
+  huella: string | null;
 
   @Column()
   @ApiProperty({ description: 'ID del dispositivo', example: 1 })
