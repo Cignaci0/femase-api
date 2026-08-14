@@ -12,9 +12,9 @@ import {
 
 export class HuellaItemDto {
   @IsString()
-  @IsNotEmpty()
-  @ApiProperty({ description: 'Huella en formato XML', example: '<xml>huella_1</xml>' })
-  huella: string;
+  @IsOptional()
+  @ApiProperty({ description: 'Huella en formato XML', example: '<xml>huella_1</xml>', required: false })
+  huella?: string;
 
   @IsInt()
   @IsNotEmpty()
@@ -29,17 +29,19 @@ export class CreateTareaHuellaDto {
   dispositivo_id: number;
 
   @IsArray()
+  @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => HuellaItemDto)
   @ApiProperty({
-    description: 'Arreglo de huellas',
+    description: 'Arreglo de huellas (opcional)',
     type: [HuellaItemDto],
+    required: false,
     example: [
-      { xml: '<xml>huella_1</xml>', indice: 0 },
-      { xml: '<xml>huella_2</xml>', indice: 1 },
+      { huella: '<xml>huella_1</xml>', indice: 0 },
+      { huella: '<xml>huella_2</xml>', indice: 1 },
     ],
   })
-  huellas: HuellaItemDto[];
+  huellas?: HuellaItemDto[];
 
   @IsString()
   @IsNotEmpty()
