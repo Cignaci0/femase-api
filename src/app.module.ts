@@ -101,18 +101,18 @@ import { AppController } from './app.controller';
     ConfigModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',
+      host: 'dpg-d9tkfhh42hec738f9050-a.oregon-postgres.render.com',
       port: 5432,
-      username: 'postgres',
-      password: "Admin",
-      database: 'postgres',
+      username: 'femase',
+      password: "Wz8Dw4iUjTTgmLq074HxWhYyjHo0Pdyw",
+      database: 'femase',
       synchronize: false,
-      //ssl: true,
-      //extra: {
-      //  ssl: {
-      //    rejectUnauthorized: false,
-      //  },
-      //},
+      ssl: true,
+      extra: {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      },
       entities: [
         User,
         Perfil,
